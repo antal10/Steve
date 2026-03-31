@@ -10,13 +10,15 @@ Steve is a local Electron desktop app that opens persistent browser windows to y
 
 ## Built-in Roster
 
-Steve currently ships with 5 built-in agents:
+Steve currently ships with 7 built-in agents:
 
 - `@o3`
 - `@gemini`
 - `@copilot`
 - `@claude`
 - `@sonar`
+- `@meta`
+- `@grok`
 
 The Control Panel lets the user toggle any of these agents on or off per run.
 
@@ -51,7 +53,7 @@ Each agent driver polls for completion, extracts the response text, and stores i
 
 ### Stage 3 - Deliberate
 
-Each agent receives a deliberation prompt containing every other active agent's opening statement. With the full 5-agent roster enabled, Stage 3 produces `5 x 4 = 20` cross-replies. Hard cap: 1 round, no recursion.
+Each agent receives a deliberation prompt containing every other active agent's opening statement. With the full 7-agent roster enabled, Stage 3 produces `7 x 6 = 42` cross-replies. Hard cap: 1 round, no recursion.
 
 Each cross-reply is stored as a post object with `stage: "deliberation"` and `reply_to: "@agentname"`.
 
@@ -73,6 +75,8 @@ Here are the other agents' opening statements:
 @{other2}: "{statement2}"
 @{other3}: "{statement3}"
 @{other4}: "{statement4}"
+@{other5}: "{statement5}"
+@{other6}: "{statement6}"
 
 Reply to each agent separately.
 Start each section with "To @agent:".
@@ -88,6 +92,6 @@ Be direct. No filler.
 - No API keys anywhere
 - No database - JSON files in `runs/`
 - No server - everything local, single process
-- 5 built-in agents max in V1
+- 7 built-in agents max in V1
 - 1 deliberation round only
 - No authentication UI - sessions are set up once via Playwright persistent contexts

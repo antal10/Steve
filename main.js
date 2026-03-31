@@ -6,6 +6,8 @@ const ClaudeAgent = require("./agents/claude-agent");
 const PerplexityAgent = require("./agents/perplexity-agent");
 const GeminiAgent = require("./agents/gemini-agent");
 const CopilotAgent = require("./agents/copilot-agent");
+const MetaAgent = require("./agents/meta-agent");
+const GrokAgent = require("./agents/grok-agent");
 const Pipeline = require("./council/pipeline");
 const { saveRun } = require("./council/run-store");
 
@@ -32,6 +34,10 @@ function createAgent(handle) {
       return new GeminiAgent({ sessionsDir: SESSIONS_DIR });
     case "copilot":
       return new CopilotAgent({ sessionsDir: SESSIONS_DIR });
+    case "meta":
+      return new MetaAgent({ sessionsDir: SESSIONS_DIR });
+    case "grok":
+      return new GrokAgent({ sessionsDir: SESSIONS_DIR });
     default:
       throw new Error(`Unknown agent handle: ${handle}`);
   }

@@ -26,7 +26,7 @@ No API keys. No cloud. No copy-paste.
 
 ## Agents
 
-Steve currently ships with a 5-agent roster:
+Steve currently ships with a 7-agent roster:
 
 | Handle | Model | Site |
 |--------|-------|------|
@@ -35,6 +35,8 @@ Steve currently ships with a 5-agent roster:
 | @copilot | Microsoft Copilot | copilot.microsoft.com |
 | @claude | Claude Opus 4.6 | claude.ai |
 | @sonar | Sonar Pro | perplexity.ai |
+| @meta | Meta AI | meta.ai |
+| @grok | Grok | grok.com |
 
 All active agents receive the same prompt and the same deliberation round. No roles, no routing, no weighting.
 

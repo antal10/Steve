@@ -7,6 +7,8 @@
     copilot: "#00a4ef",
     claude: "#d97706",
     sonar: "#1da1f2",
+    meta: "#2563eb",
+    grok: "#111827",
   };
 
   const viewControl = document.getElementById("view-control");
