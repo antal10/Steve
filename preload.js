@@ -16,4 +16,8 @@ contextBridge.exposeInMainWorld("steve", {
   /** Subscribe to Playwright log lines for the live log strip. */
   onLog: (callback) =>
     ipcRenderer.on("steve-log", (_event, line) => callback(line)),
+
+  /** Subscribe to stage changes during the pipeline. */
+  onStageChanged: (callback) =>
+    ipcRenderer.on("stage-changed", (_event, stage) => callback(stage)),
 });

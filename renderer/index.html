@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Steve — AI Council</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ── View 1: Control Panel ────────────────────────────── -->
+  <div id="view-control" class="view active">
+    <header class="panel-header">
+      <h1 class="logo">Steve</h1>
+      <span class="subtitle">AI Council</span>
+    </header>
+
+    <section class="prompt-section">
+      <textarea id="prompt-input" placeholder="Ask the council..." rows="5"></textarea>
+    </section>
+
+    <section class="agents-section">
+      <span class="agents-label">Agents</span>
+      <div class="agent-chips" id="agent-chips">
+        <button class="agent-chip active" data-agent="o3" style="--agent-color: #10a37f">@o3</button>
+        <button class="agent-chip active" data-agent="claude" style="--agent-color: #d97706">@claude</button>
+        <button class="agent-chip active" data-agent="sonar" style="--agent-color: #1da1f2">@sonar</button>
+        <button class="agent-chip active" data-agent="codex" style="--agent-color: #8b5cf6">@codex</button>
+      </div>
+    </section>
+
+    <section class="stage-section">
+      <div class="stage-bar" id="stage-bar">
+        <div class="stage-item active" data-stage="idle">Idle</div>
+        <div class="stage-item" data-stage="broadcasting">Broadcasting</div>
+        <div class="stage-item" data-stage="collecting">Collecting</div>
+        <div class="stage-item" data-stage="deliberating">Deliberating</div>
+        <div class="stage-item" data-stage="minutes">Minutes Ready</div>
+      </div>
+    </section>
+
+    <section class="action-section">
+      <button id="btn-convene" class="btn-convene">Convene Council</button>
+    </section>
+
+    <section class="log-section">
+      <div class="log-header">Live Log</div>
+      <div id="log-strip" class="log-strip"></div>
+    </section>
+  </div>
+
+  <!-- ── View 2: Council Thread ───────────────────────────── -->
+  <div id="view-thread" class="view">
+    <header class="thread-header">
+      <button id="btn-back" class="btn-back">← Control Panel</button>
+      <h2 class="thread-title">Council Thread</h2>
+      <button id="btn-copy" class="btn-copy">Copy All</button>
+    </header>
+
+    <div id="thread-container" class="thread-container">
+      <div id="root-post" class="post-card root-post" style="display:none">
+        <div class="post-meta">
+          <span class="post-badge" style="--agent-color: #e2e8f0; color: #1a1a2e;">You</span>
+          <span class="post-timestamp" id="root-timestamp"></span>
+        </div>
+        <div class="post-content" id="root-content"></div>
+      </div>
+
+      <div id="posts-area" class="posts-area"></div>
+
+      <div id="minutes-card" class="minutes-card" style="display:none">
+        <h3 class="minutes-title">Meeting Minutes</h3>
+        <div id="minutes-content" class="minutes-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
