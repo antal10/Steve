@@ -1,25 +1,24 @@
-/* ── Steve V1 — Frontend Logic ──────────────────────────── */
-
 (function () {
   "use strict";
 
-  /* ── Agent color map ──────────────────────────────────── */
   const AGENT_COLORS = {
     o3: "#10a37f",
-    claude: "#d97706",
-    sonar: "#1da1f2",
-    codex: "#8b5cf6",
     gemini: "#4285f4",
     copilot: "#00a4ef",
+    claude: "#d97706",
+    sonar: "#1da1f2",
   };
 
-  /* ── DOM refs ─────────────────────────────────────────── */
   const viewControl = document.getElementById("view-control");
   const viewThread = document.getElementById("view-thread");
   const promptInput = document.getElementById("prompt-input");
   const chipContainer = document.getElementById("agent-chips");
   const stageBar = document.getElementById("stage-bar");
-  const btnSend = document.getElementById("btn-send");
+  const btnRun = document.getElementById("btn-run");
+  const btnPause = document.getElementById("btn-pause");
+  const btnResume = document.getElementById("btn-resume");
+  const btnThread = document.getElementById("btn-thread");
+  const runStatus = document.getElementById("run-status");
   const logStrip = document.getElementById("log-strip");
   const btnBack = document.getElementById("btn-back");
   const btnCopy = document.getElementById("btn-copy");
@@ -30,47 +29,44 @@
   const minutesCard = document.getElementById("minutes-card");
   const minutesContent = document.getElementById("minutes-content");
 
-  /* ── State ────────────────────────────────────────────── */
   let runActive = false;
   let waitingForResume = false;
+  let pauseRequested = false;
+  let currentPrompt = "";
   let currentPosts = [];
   let currentMinutes = null;
-  let currentPrompt = "";
 
-  /* ── View switching ───────────────────────────────────── */
+  function isBusy() {
+    return runActive || waitingForResume;
+  }
+
   function showView(view) {
     viewControl.classList.remove("active");
     viewThread.classList.remove("active");
     view.classList.add("active");
   }
 
-  btnBack.addEventListener("click", function () {
-    showView(viewControl);
-  });
-
-  /* ── Agent chip toggles ───────────────────────────────── */
-  chipContainer.addEventListener("click", function (e) {
-    var chip = e.target.closest(".agent-chip");
-    if (!chip || runActive) return;
-    chip.classList.toggle("active");
-  });
-
-  function getSelectedAgents() {
-    var chips = chipContainer.querySelectorAll(".agent-chip.active");
-    var agents = [];
-    for (var i = 0; i < chips.length; i++) {
-      agents.push(chips[i].dataset.agent);
-    }
-    return agents;
+  function updateStatus(text) {
+    runStatus.textContent = text;
   }
 
-  /* ── Stage bar updates ────────────────────────────────── */
+  function syncControls() {
+    const threadAvailable = Boolean(currentPrompt || currentPosts.length || currentMinutes);
+
+    promptInput.disabled = isBusy();
+    btnRun.disabled = isBusy();
+    btnPause.disabled = !runActive || waitingForResume || pauseRequested;
+    btnResume.disabled = !waitingForResume;
+    btnThread.disabled = !threadAvailable;
+  }
+
   function setStage(stageName) {
-    var items = stageBar.querySelectorAll(".stage-item");
-    var reachedActive = false;
-    for (var i = 0; i < items.length; i++) {
-      var item = items[i];
-      var itemStage = item.dataset.stage;
+    const items = stageBar.querySelectorAll(".stage-item");
+    let reachedActive = false;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemStage = item.dataset.stage;
       item.classList.remove("active", "completed");
 
       if (itemStage === stageName) {
@@ -82,34 +78,14 @@
     }
   }
 
-  /* ── Button state management ──────────────────────────── */
-  function setButtonToSend() {
-    btnSend.textContent = "Send";
-    btnSend.className = "btn-send";
-    btnSend.disabled = false;
-  }
-
-  function setButtonToWorking() {
-    btnSend.textContent = "Working...";
-    btnSend.className = "btn-send working";
-    btnSend.disabled = true;
-  }
-
-  function setButtonToResume() {
-    btnSend.textContent = "Resume";
-    btnSend.className = "btn-send resume";
-    btnSend.disabled = false;
-  }
-
-  /* ── Log strip ────────────────────────────────────────── */
   function appendLog(line) {
-    var el = document.createElement("div");
+    const el = document.createElement("div");
     el.className = "log-line";
 
-    var match = line.match(/^\[(@?\w+)\]/);
+    const match = line.match(/^\[(@?\w+)\]/);
     if (match) {
-      var handle = match[1].replace("@", "");
-      var span = document.createElement("span");
+      const handle = match[1].replace("@", "");
+      const span = document.createElement("span");
       span.className = "log-handle";
       span.style.color = AGENT_COLORS[handle] || "inherit";
       span.textContent = match[0];
@@ -123,29 +99,73 @@
     logStrip.scrollTop = logStrip.scrollHeight;
   }
 
-  /* ── Post rendering ───────────────────────────────────── */
+  function formatTime(isoString) {
+    try {
+      return new Date(isoString).toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function getSelectedAgents() {
+    const chips = chipContainer.querySelectorAll(".agent-chip.active");
+    const agents = [];
+    for (let i = 0; i < chips.length; i++) {
+      agents.push(chips[i].dataset.agent);
+    }
+    return agents;
+  }
+
+  function resetRunView(prompt) {
+    currentPrompt = prompt;
+    currentPosts = [];
+    currentMinutes = null;
+
+    postsArea.innerHTML = "";
+    minutesCard.style.display = "none";
+    minutesContent.innerHTML = "";
+    logStrip.innerHTML = "";
+
+    rootContent.textContent = prompt;
+    rootTimestamp.textContent = formatTime(new Date().toISOString());
+    rootPost.style.display = "block";
+
+    syncControls();
+  }
+
   function renderPost(post) {
     currentPosts.push(post);
+    syncControls();
 
-    var card = document.createElement("div");
+    const card = document.createElement("div");
     card.className = "post-card";
 
-    var meta = document.createElement("div");
+    const meta = document.createElement("div");
     meta.className = "post-meta";
 
-    var badge = document.createElement("span");
+    const badge = document.createElement("span");
     badge.className = "post-badge";
-    var handle = post.author.replace("@", "");
+    const handle = post.author.replace("@", "");
     badge.style.setProperty("--agent-color", AGENT_COLORS[handle] || "#64748b");
     badge.textContent = post.author;
 
-    var ts = document.createElement("span");
+    const ts = document.createElement("span");
     ts.className = "post-timestamp";
     ts.textContent = formatTime(post.timestamp);
 
-    var wc = document.createElement("span");
+    const wc = document.createElement("span");
     wc.className = "post-word-count";
-    wc.textContent = post.word_count + " words";
+    wc.textContent = `${post.word_count} words`;
 
     meta.appendChild(badge);
     meta.appendChild(ts);
@@ -153,149 +173,191 @@
     card.appendChild(meta);
 
     if (post.reply_to) {
-      var replyTag = document.createElement("div");
+      const replyTag = document.createElement("div");
       replyTag.className = "post-reply-tag";
-      replyTag.textContent = "\u21a9 replying to " + post.reply_to;
+      replyTag.textContent = `Replying to ${post.reply_to}`;
       card.appendChild(replyTag);
     }
 
-    var content = document.createElement("div");
+    const content = document.createElement("div");
     content.className = "post-content";
     content.textContent = post.content;
     card.appendChild(content);
 
     postsArea.appendChild(card);
-    card.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
-  /* ── Minutes rendering ────────────────────────────────── */
+  function renderListSection(title, items) {
+    let html = `<h4>${title}</h4><ul>`;
+
+    if (items.length === 0) {
+      html += "<li>No items captured.</li>";
+    } else {
+      items.forEach(function (item) {
+        html += `<li>${escapeHtml(item)}</li>`;
+      });
+    }
+
+    html += "</ul>";
+    return html;
+  }
+
   function renderMinutes(minutes) {
     currentMinutes = minutes;
-    var html = "";
+    syncControls();
 
-    html += "<h4>Points of Agreement</h4><ul>";
-    (minutes.points_of_agreement || []).forEach(function (p) {
-      html += "<li>" + escapeHtml(p) + "</li>";
-    });
-    html += "</ul>";
-
-    html += "<h4>Points of Disagreement</h4><ul>";
-    (minutes.points_of_disagreement || []).forEach(function (p) {
-      html += "<li>" + escapeHtml(p) + "</li>";
-    });
-    html += "</ul>";
-
-    html += "<h4>Unresolved Questions</h4><ul>";
-    (minutes.unresolved_questions || []).forEach(function (p) {
-      html += "<li>" + escapeHtml(p) + "</li>";
-    });
-    html += "</ul>";
-
+    let html = "";
+    html += renderListSection("Points of Agreement", minutes.points_of_agreement || []);
+    html += renderListSection("Points of Disagreement", minutes.points_of_disagreement || []);
+    html += renderListSection("Unresolved Questions", minutes.unresolved_questions || []);
     html += "<h4>Recommended Next Action</h4>";
-    html += '<div class="next-action">' + escapeHtml(minutes.recommended_next_action || "N/A") + "</div>";
+    html += `<div class="next-action">${escapeHtml(minutes.recommended_next_action || "N/A")}</div>`;
 
-    var level = minutes.consensus_level || "unresolved";
-    html += '<div><span class="consensus-badge ' + level + '">Consensus: ' + level + "</span></div>";
+    const level = minutes.consensus_level || "unresolved";
+    html += `<div><span class="consensus-badge ${level}">Consensus: ${escapeHtml(level)}</span></div>`;
 
     minutesContent.innerHTML = html;
     minutesCard.style.display = "block";
-    minutesCard.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
-  /* ── Copy All ─────────────────────────────────────────── */
-  btnCopy.addEventListener("click", function () {
-    var text = "COUNCIL THREAD\n";
-    text += "Prompt: " + currentPrompt + "\n";
-    text += "═".repeat(60) + "\n\n";
+  function buildCopyText() {
+    let text = "COUNCIL THREAD\n";
+    text += `Prompt: ${currentPrompt}\n`;
+    text += `${"=".repeat(60)}\n\n`;
 
     currentPosts.forEach(function (post) {
       if (post.reply_to) {
-        text += post.author + " (replying to " + post.reply_to + "):\n";
+        text += `${post.author} (replying to ${post.reply_to}):\n`;
       } else {
-        text += post.author + " (" + post.stage + "):\n";
+        text += `${post.author} (${post.stage}):\n`;
       }
-      text += post.content + "\n\n";
+      text += `${post.content}\n\n`;
     });
 
     if (currentMinutes) {
-      text += "═".repeat(60) + "\n";
+      text += `${"=".repeat(60)}\n`;
       text += "MEETING MINUTES\n\n";
       text += "Points of Agreement:\n";
-      (currentMinutes.points_of_agreement || []).forEach(function (p) { text += "  • " + p + "\n"; });
+      (currentMinutes.points_of_agreement || []).forEach(function (item) {
+        text += `- ${item}\n`;
+      });
       text += "\nPoints of Disagreement:\n";
-      (currentMinutes.points_of_disagreement || []).forEach(function (p) { text += "  • " + p + "\n"; });
+      (currentMinutes.points_of_disagreement || []).forEach(function (item) {
+        text += `- ${item}\n`;
+      });
       text += "\nUnresolved Questions:\n";
-      (currentMinutes.unresolved_questions || []).forEach(function (p) { text += "  • " + p + "\n"; });
-      text += "\nRecommended Next Action:\n  " + (currentMinutes.recommended_next_action || "N/A") + "\n";
-      text += "\nConsensus: " + (currentMinutes.consensus_level || "unresolved") + "\n";
+      (currentMinutes.unresolved_questions || []).forEach(function (item) {
+        text += `- ${item}\n`;
+      });
+      text += `\nRecommended Next Action:\n${currentMinutes.recommended_next_action || "N/A"}\n`;
+      text += `\nConsensus: ${currentMinutes.consensus_level || "unresolved"}\n`;
     }
 
-    navigator.clipboard.writeText(text).then(function () {
-      var orig = btnCopy.textContent;
+    return text;
+  }
+
+  chipContainer.addEventListener("click", function (event) {
+    const chip = event.target.closest(".agent-chip");
+    if (!chip || isBusy()) {
+      return;
+    }
+    chip.classList.toggle("active");
+  });
+
+  btnBack.addEventListener("click", function () {
+    showView(viewControl);
+  });
+
+  btnThread.addEventListener("click", function () {
+    if (!btnThread.disabled) {
+      showView(viewThread);
+    }
+  });
+
+  btnCopy.addEventListener("click", function () {
+    navigator.clipboard.writeText(buildCopyText()).then(function () {
+      const original = btnCopy.textContent;
       btnCopy.textContent = "Copied!";
-      setTimeout(function () { btnCopy.textContent = orig; }, 1500);
+      setTimeout(function () {
+        btnCopy.textContent = original;
+      }, 1500);
     });
   });
 
-  /* ── Send / Resume button ────────────────────────────── */
-  btnSend.addEventListener("click", async function () {
-    // If we're waiting for resume, send the resume signal
-    if (waitingForResume) {
-      waitingForResume = false;
-      setButtonToWorking();
-      window.steve.resumeCouncil();
+  btnRun.addEventListener("click", async function () {
+    const prompt = promptInput.value.trim();
+    if (!prompt) {
+      appendLog("[Steve] Enter a prompt before starting a run.");
       return;
     }
 
-    // Otherwise, this is a new Send
-    var prompt = promptInput.value.trim();
-    if (!prompt) return;
-
-    var agents = getSelectedAgents();
+    const agents = getSelectedAgents();
     if (agents.length === 0) {
-      appendLog("[Steve] No agents selected.");
+      appendLog("[Steve] Select at least one agent.");
       return;
     }
 
     runActive = true;
-    setButtonToWorking();
-    currentPosts = [];
-    currentMinutes = null;
-    currentPrompt = prompt;
-
-    postsArea.innerHTML = "";
-    minutesCard.style.display = "none";
-    logStrip.innerHTML = "";
-
-    rootContent.textContent = prompt;
-    rootTimestamp.textContent = formatTime(new Date().toISOString());
-    rootPost.style.display = "block";
-
+    waitingForResume = false;
+    pauseRequested = false;
+    resetRunView(prompt);
     setStage("broadcasting");
-    appendLog("[Steve] Council convened — " + agents.length + " agents active");
-
-    showView(viewThread);
+    updateStatus("Running");
+    appendLog(`[Steve] Council convened - ${agents.length} agents active.`);
+    syncControls();
 
     try {
-      await window.steve.runCouncil(prompt, agents);
-      appendLog("[Steve] Council session complete.");
+      const result = await window.steve.runCouncil(prompt, agents);
+      if (result && result.error) {
+        appendLog(`[Steve] ${result.error}`);
+        setStage("idle");
+        updateStatus("Ready");
+      } else {
+        updateStatus("Complete");
+      }
     } catch (err) {
-      appendLog("[Steve] Error: " + err.message);
+      appendLog(`[Steve] Error: ${err.message}`);
+      setStage("idle");
+      updateStatus("Ready");
     } finally {
       runActive = false;
       waitingForResume = false;
-      setButtonToSend();
-      setStage("idle");
+      pauseRequested = false;
+      syncControls();
     }
   });
 
-  /* ── IPC Listeners ────────────────────────────────────── */
+  btnPause.addEventListener("click", function () {
+    if (!runActive || waitingForResume || pauseRequested) {
+      return;
+    }
+
+    pauseRequested = true;
+    updateStatus("Pause requested");
+    appendLog("[Steve] Pause requested. Waiting for the next checkpoint.");
+    window.steve.pauseCouncil();
+    syncControls();
+  });
+
+  btnResume.addEventListener("click", function () {
+    if (!waitingForResume) {
+      return;
+    }
+
+    waitingForResume = false;
+    runActive = true;
+    updateStatus("Resuming");
+    window.steve.resumeCouncil();
+    syncControls();
+  });
+
   window.steve.onPostArrived(function (post) {
     renderPost(post);
   });
 
   window.steve.onMinutesReady(function (minutes) {
     renderMinutes(minutes);
+    updateStatus("Minutes ready");
   });
 
   window.steve.onLog(function (line) {
@@ -304,26 +366,26 @@
 
   window.steve.onStageChanged(function (stage) {
     setStage(stage);
+    if (stage === "broadcasting") {
+      updateStatus("Broadcasting");
+    } else if (stage === "collecting") {
+      updateStatus("Collecting");
+    } else if (stage === "deliberating") {
+      updateStatus("Deliberating");
+    } else if (stage === "minutes") {
+      updateStatus("Generating minutes");
+    }
   });
 
   window.steve.onPauseForResume(function () {
+    pauseRequested = false;
     waitingForResume = true;
-    setButtonToResume();
+    runActive = false;
+    updateStatus("Paused");
+    syncControls();
   });
 
-  /* ── Helpers ──────────────────────────────────────────── */
-  function formatTime(isoString) {
-    try {
-      var d = new Date(isoString);
-      return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    } catch (_) {
-      return "";
-    }
-  }
-
-  function escapeHtml(str) {
-    var div = document.createElement("div");
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
-  }
+  setStage("idle");
+  updateStatus("Ready");
+  syncControls();
 })();

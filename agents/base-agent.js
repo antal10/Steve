@@ -2,7 +2,7 @@ const { chromium } = require("playwright");
 const path = require("path");
 
 /**
- * BaseAgent — shared Playwright driver logic for all council agents.
+ * BaseAgent - shared Playwright driver logic for all council agents.
  *
  * Subclasses override:
  *   get inputSelector()
@@ -20,16 +20,19 @@ class BaseAgent {
     this.page = null;
     this.onLog = () => {};
     this._hasNavigated = false;     // Track if we've already loaded the site
+    this._responseBaseline = "";
+    this._latestFreshResponse = "";
+    this._awaitingFreshResponse = false;
   }
 
   log(msg) {
     this.onLog(`[@${this.handle}] ${msg}`);
   }
 
-  /* ── Lifecycle ────────────────────────────────────────── */
+  /* Lifecycle */
 
   async launch() {
-    this.log(`Launching browser (persistent context)...`);
+    this.log("Launching browser (persistent context)...");
     this.context = await chromium.launchPersistentContext(this.sessionsDir, {
       headless: false,
       viewport: { width: 1280, height: 900 },
@@ -56,13 +59,16 @@ class BaseAgent {
     this.context = null;
     this.page = null;
     this._hasNavigated = false;
+    this._responseBaseline = "";
+    this._latestFreshResponse = "";
+    this._awaitingFreshResponse = false;
   }
 
-  /* ── Core actions ─────────────────────────────────────── */
+  /* Core actions */
 
   /**
    * Send a prompt. On first call, navigates to the site.
-   * On subsequent calls (deliberation), stays in the same thread.
+   * On subsequent calls (deliberation/minutes), stays in the same thread.
    */
   async sendPrompt(text) {
     if (!this._hasNavigated) {
@@ -75,6 +81,11 @@ class BaseAgent {
       this.log("Staying in thread. Typing follow-up...");
       await this.page.waitForTimeout(1000);
     }
+
+    this._responseBaseline = await this._readLatestResponse();
+    this._latestFreshResponse = "";
+    this._awaitingFreshResponse = true;
+
     await this.typeAndSubmit(this.page, text);
     this.log("Prompt submitted. Waiting for response...");
   }
@@ -87,16 +98,14 @@ class BaseAgent {
     await element.click();
     await page.waitForTimeout(200);
 
-    // Use clipboard to paste — much faster than keyboard.type()
     await page.evaluate(async (t) => {
       await navigator.clipboard.writeText(t);
     }, text);
 
-    // Ctrl+V to paste
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
-    await page.keyboard.press(`${modifier}+a`);  // Select all existing text
+    await page.keyboard.press(`${modifier}+a`);
     await page.waitForTimeout(100);
-    await page.keyboard.press(`${modifier}+v`);  // Paste
+    await page.keyboard.press(`${modifier}+v`);
     await page.waitForTimeout(300);
   }
 
@@ -108,13 +117,11 @@ class BaseAgent {
     await element.click();
     await page.waitForTimeout(200);
 
-    // Try to set value via evaluate for contenteditable or textarea
     await page.evaluate(({ el, t }) => {
       if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
         el.value = t;
         el.dispatchEvent(new Event("input", { bubbles: true }));
       } else {
-        // contenteditable
         el.textContent = t;
         el.dispatchEvent(new Event("input", { bubbles: true }));
       }
@@ -124,9 +131,9 @@ class BaseAgent {
   }
 
   /**
-   * Polls for response completion using text-stability check.
-   * Text length must be unchanged for 3 consecutive checks (6s stable).
-   * Global timeout: 120 seconds.
+   * Polls for response completion using exact text stability.
+   * A response must differ from the previous assistant turn and stay
+   * unchanged for 3 consecutive checks (6s stable).
    */
   async waitForResponse() {
     const POLL_INTERVAL = 2000;
@@ -134,49 +141,76 @@ class BaseAgent {
     const GLOBAL_TIMEOUT = 120000;
 
     const start = Date.now();
-    let lastLength = -1;
+    let lastText = "";
     let stableCount = 0;
 
     while (Date.now() - start < GLOBAL_TIMEOUT) {
       await this.page.waitForTimeout(POLL_INTERVAL);
 
-      let currentText = "";
-      try {
-        currentText = await this.extractResponse(this.page);
-      } catch (_) {
-        /* response element may not exist yet */
+      const currentText = await this._readLatestResponse();
+      const isFreshResponse = currentText.length > 0 && currentText !== this._responseBaseline;
+
+      if (!isFreshResponse) {
+        stableCount = 0;
+        lastText = "";
+        continue;
       }
 
-      const currentLength = currentText.length;
+      this._latestFreshResponse = currentText;
 
-      if (currentLength > 0 && currentLength === lastLength) {
+      if (currentText === lastText) {
         stableCount++;
         if (stableCount >= STABLE_THRESHOLD) {
-          this.log("Response stable — extraction ready.");
+          this.log("Response stable - extraction ready.");
           return;
         }
       } else {
         stableCount = 0;
+        lastText = currentText;
       }
-
-      lastLength = currentLength;
     }
 
-    this.log("Response timed out after 120s — extracting what we have.");
+    if (this._latestFreshResponse) {
+      this.log("Response timed out after 120s - using latest partial response.");
+      return;
+    }
+
+    this.log("Response timed out after 120s - no fresh response detected.");
   }
 
   /**
-   * Gets the final response text from the page.
-   * Returns the text content.
+   * Gets the latest fresh response text from the page.
    */
   async getResponse() {
-    const text = await this.extractResponse(this.page);
+    let text = this._latestFreshResponse || await this._readLatestResponse();
+
+    if (this._awaitingFreshResponse && text === this._responseBaseline) {
+      this.log("Response extraction returned no fresh text.");
+      text = "";
+    }
+
+    this._awaitingFreshResponse = false;
+    this._latestFreshResponse = "";
+
+    if (!text) {
+      return "";
+    }
+
+    this._responseBaseline = text;
     const wordCount = text.split(/\s+/).filter(Boolean).length;
     this.log(`Response extracted (${wordCount} words).`);
     return text;
   }
 
-  /* ── Subclass overrides ───────────────────────────────── */
+  async _readLatestResponse() {
+    try {
+      return (await this.extractResponse(this.page)).trim();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  /* Subclass overrides */
 
   async typeAndSubmit(page, text) {
     throw new Error("Subclass must implement typeAndSubmit()");
