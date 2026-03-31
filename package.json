@@ -1,0 +1,16 @@
+{
+  "name": "steve",
+  "version": "1.0.0",
+  "description": "Local AI Council desktop app — prompt fan-out, cross-deliberation, and council meeting minutes. No API keys. Playwright browser automation.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": ["electron", "playwright", "ai-council", "multi-agent"],
+  "author": "antal10",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^33.0.0",
+    "playwright": "^1.50.0"
+  }
+}
