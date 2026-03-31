@@ -26,12 +26,14 @@ No API keys. No cloud. No copy-paste.
 
 ## Agents
 
-| Handle | Model | Site | Role |
-|--------|-------|------|------|
-| @o3 | o3-pro | chatgpt.com | Reasoner |
-| @claude | Claude Opus 4.6 | claude.ai | Analyst |
-| @sonar | Sonar Pro | perplexity.ai | Grounded / Citations |
-| @codex | GPT-5-Codex | chatgpt.com | Executor |
+| Handle | Model | Site |
+|--------|-------|------|
+| @o3 | o3-pro | chatgpt.com |
+| @claude | Claude Opus 4.6 | claude.ai |
+| @sonar | Sonar Pro | perplexity.ai |
+| @codex | GPT-5-Codex | chatgpt.com |
+
+All agents receive the same prompt and the same deliberation round. No roles, no routing, no weighting.
 
 ## Folder Structure
 
