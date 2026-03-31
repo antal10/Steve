@@ -32,6 +32,8 @@ No API keys. No cloud. No copy-paste.
 | @claude | Claude Opus 4.6 | claude.ai |
 | @sonar | Sonar Pro | perplexity.ai |
 | @codex | GPT-5-Codex | chatgpt.com |
+| @gemini | Gemini 3 | gemini.google.com |
+| @copilot | Microsoft Copilot | copilot.microsoft.com |
 
 All agents receive the same prompt and the same deliberation round. No roles, no routing, no weighting.
 

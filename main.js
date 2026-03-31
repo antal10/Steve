@@ -5,12 +5,15 @@ const ChatGPTAgent = require("./agents/chatgpt-agent");
 const ClaudeAgent = require("./agents/claude-agent");
 const PerplexityAgent = require("./agents/perplexity-agent");
 const CodexAgent = require("./agents/codex-agent");
+const GeminiAgent = require("./agents/gemini-agent");
+const CopilotAgent = require("./agents/copilot-agent");
 const Pipeline = require("./council/pipeline");
 const { saveRun } = require("./council/run-store");
 
 const SESSIONS_DIR = path.join(__dirname, "sessions");
 
 let mainWindow;
+let activePipeline = null; // Track current pipeline for resume
 
 /* ── Agent factory ──────────────────────────────────────── */
 
@@ -30,6 +33,10 @@ function createAgent(handle) {
       return new PerplexityAgent({ sessionsDir: SESSIONS_DIR });
     case "codex":
       return new CodexAgent({ sessionsDir: SESSIONS_DIR });
+    case "gemini":
+      return new GeminiAgent({ sessionsDir: SESSIONS_DIR });
+    case "copilot":
+      return new CopilotAgent({ sessionsDir: SESSIONS_DIR });
     default:
       throw new Error(`Unknown agent handle: ${handle}`);
   }
@@ -97,10 +104,18 @@ ipcMain.handle("run-council", async (_event, { prompt, agents: agentHandles }) =
     onStageChange: (stage) => {
       mainWindow.webContents.send("stage-changed", stage);
     },
+    onPauseForResume: () => {
+      mainWindow.webContents.send("pause-for-resume");
+    },
   });
+
+  // Store active pipeline so resume can reach it
+  activePipeline = pipeline;
 
   // Run the full pipeline
   const runData = await pipeline.run(prompt);
+
+  activePipeline = null;
 
   // Persist the run
   try {
@@ -111,4 +126,13 @@ ipcMain.handle("run-council", async (_event, { prompt, agents: agentHandles }) =
   }
 
   return runData;
+});
+
+/* ── IPC: resume-council ────────────────────────────────── */
+
+ipcMain.on("resume-council", () => {
+  console.log("[Steve] Resume signal received.");
+  if (activePipeline) {
+    activePipeline.resume();
+  }
 });

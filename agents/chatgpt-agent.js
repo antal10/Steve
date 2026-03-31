@@ -7,11 +7,15 @@ const BaseAgent = require("./base-agent");
  *   Input:    #prompt-textarea or div[contenteditable="true"]
  *   Send:     button[data-testid="send-button"] or Enter key
  *   Response: .markdown in last assistant message, or [data-message-author-role="assistant"]
+ *
+ * Uses clipboard paste instead of letter-by-letter typing.
+ * Stays in the same thread for deliberation follow-ups.
  */
 class ChatGPTAgent extends BaseAgent {
   constructor({ handle, name, siteUrl, sessionsDir, model }) {
     super({ handle, name, siteUrl, sessionsDir });
     this.model = model; // "o3-pro" or "codex"
+    this._responseCount = 0; // Track how many responses to skip
   }
 
   async typeAndSubmit(page, text) {
@@ -25,18 +29,12 @@ class ChatGPTAgent extends BaseAgent {
       throw new Error("Could not find ChatGPT input element");
     }
 
-    await input.click();
-    await page.waitForTimeout(300);
-
-    // Type the text using keyboard to handle contenteditable divs
-    await input.fill("");
-    await page.waitForTimeout(100);
-
-    // For contenteditable, use page.keyboard
-    await input.click();
-    for (const line of text.split("\n")) {
-      await page.keyboard.type(line, { delay: 5 });
-      await page.keyboard.press("Shift+Enter");
+    // Use clipboard paste
+    try {
+      await this.clipboardPaste(page, input, text);
+    } catch (e) {
+      this.log("Clipboard paste failed, trying direct paste...");
+      await this.directPaste(page, input, text);
     }
 
     await page.waitForTimeout(300);
@@ -49,11 +47,13 @@ class ChatGPTAgent extends BaseAgent {
       await page.keyboard.press("Enter");
     }
 
+    // Record that we expect one more response
+    this._responseCount++;
     this.log("Prompt sent via ChatGPT interface.");
   }
 
   async extractResponse(page) {
-    // Get the last assistant message
+    // Get the last assistant message (skip earlier ones from this thread)
     const selectors = [
       '[data-message-author-role="assistant"] .markdown',
       '[data-message-author-role="assistant"]',
@@ -63,6 +63,7 @@ class ChatGPTAgent extends BaseAgent {
     for (const sel of selectors) {
       const elements = await page.$$(sel);
       if (elements.length > 0) {
+        // Get the most recent response
         const last = elements[elements.length - 1];
         const text = await last.innerText();
         if (text && text.trim().length > 0) {

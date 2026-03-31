@@ -9,6 +9,8 @@
     claude: "#d97706",
     sonar: "#1da1f2",
     codex: "#8b5cf6",
+    gemini: "#4285f4",
+    copilot: "#00a4ef",
   };
 
   /* ── DOM refs ─────────────────────────────────────────── */
@@ -17,7 +19,7 @@
   const promptInput = document.getElementById("prompt-input");
   const chipContainer = document.getElementById("agent-chips");
   const stageBar = document.getElementById("stage-bar");
-  const btnConvene = document.getElementById("btn-convene");
+  const btnSend = document.getElementById("btn-send");
   const logStrip = document.getElementById("log-strip");
   const btnBack = document.getElementById("btn-back");
   const btnCopy = document.getElementById("btn-copy");
@@ -30,6 +32,7 @@
 
   /* ── State ────────────────────────────────────────────── */
   let runActive = false;
+  let waitingForResume = false;
   let currentPosts = [];
   let currentMinutes = null;
   let currentPrompt = "";
@@ -47,7 +50,7 @@
 
   /* ── Agent chip toggles ───────────────────────────────── */
   chipContainer.addEventListener("click", function (e) {
-    const chip = e.target.closest(".agent-chip");
+    var chip = e.target.closest(".agent-chip");
     if (!chip || runActive) return;
     chip.classList.toggle("active");
   });
@@ -62,8 +65,6 @@
   }
 
   /* ── Stage bar updates ────────────────────────────────── */
-  const STAGE_ORDER = ["idle", "broadcasting", "collecting", "deliberating", "minutes"];
-
   function setStage(stageName) {
     var items = stageBar.querySelectorAll(".stage-item");
     var reachedActive = false;
@@ -81,14 +82,33 @@
     }
   }
 
+  /* ── Button state management ──────────────────────────── */
+  function setButtonToSend() {
+    btnSend.textContent = "Send";
+    btnSend.className = "btn-send";
+    btnSend.disabled = false;
+  }
+
+  function setButtonToWorking() {
+    btnSend.textContent = "Working...";
+    btnSend.className = "btn-send working";
+    btnSend.disabled = true;
+  }
+
+  function setButtonToResume() {
+    btnSend.textContent = "Resume";
+    btnSend.className = "btn-send resume";
+    btnSend.disabled = false;
+  }
+
   /* ── Log strip ────────────────────────────────────────── */
   function appendLog(line) {
     var el = document.createElement("div");
     el.className = "log-line";
 
-    var match = line.match(/^\[(@\w+)\]/);
+    var match = line.match(/^\[(@?\w+)\]/);
     if (match) {
-      var handle = match[1].slice(1);
+      var handle = match[1].replace("@", "");
       var span = document.createElement("span");
       span.className = "log-handle";
       span.style.color = AGENT_COLORS[handle] || "inherit";
@@ -217,8 +237,17 @@
     });
   });
 
-  /* ── Convene Council ──────────────────────────────────── */
-  btnConvene.addEventListener("click", async function () {
+  /* ── Send / Resume button ────────────────────────────── */
+  btnSend.addEventListener("click", async function () {
+    // If we're waiting for resume, send the resume signal
+    if (waitingForResume) {
+      waitingForResume = false;
+      setButtonToWorking();
+      window.steve.resumeCouncil();
+      return;
+    }
+
+    // Otherwise, this is a new Send
     var prompt = promptInput.value.trim();
     if (!prompt) return;
 
@@ -229,7 +258,7 @@
     }
 
     runActive = true;
-    btnConvene.disabled = true;
+    setButtonToWorking();
     currentPosts = [];
     currentMinutes = null;
     currentPrompt = prompt;
@@ -254,7 +283,8 @@
       appendLog("[Steve] Error: " + err.message);
     } finally {
       runActive = false;
-      btnConvene.disabled = false;
+      waitingForResume = false;
+      setButtonToSend();
       setStage("idle");
     }
   });
@@ -274,6 +304,11 @@
 
   window.steve.onStageChanged(function (stage) {
     setStage(stage);
+  });
+
+  window.steve.onPauseForResume(function () {
+    waitingForResume = true;
+    setButtonToResume();
   });
 
   /* ── Helpers ──────────────────────────────────────────── */

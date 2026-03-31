@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld("steve", {
   runCouncil: (prompt, agents) =>
     ipcRenderer.invoke("run-council", { prompt, agents }),
 
+  /** Tell the pipeline to resume after the Stage 2 pause. */
+  resumeCouncil: () =>
+    ipcRenderer.send("resume-council"),
+
   /** Subscribe to individual posts as they arrive during a run. */
   onPostArrived: (callback) =>
     ipcRenderer.on("post-arrived", (_event, post) => callback(post)),
@@ -20,4 +24,8 @@ contextBridge.exposeInMainWorld("steve", {
   /** Subscribe to stage changes during the pipeline. */
   onStageChanged: (callback) =>
     ipcRenderer.on("stage-changed", (_event, stage) => callback(stage)),
+
+  /** Subscribe to pause-for-resume signal after Stage 2. */
+  onPauseForResume: (callback) =>
+    ipcRenderer.on("pause-for-resume", () => callback()),
 });

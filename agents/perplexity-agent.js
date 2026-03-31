@@ -7,7 +7,8 @@ const BaseAgent = require("./base-agent");
  *   Input:    textarea[placeholder] in the search/ask area
  *   Send:     Enter key or submit button
  *   Response: answer block below the query
- *   Completion: generating spinner disappears
+ *
+ * Uses clipboard paste. Stays in thread for follow-ups.
  */
 class PerplexityAgent extends BaseAgent {
   constructor({ sessionsDir }) {
@@ -33,10 +34,16 @@ class PerplexityAgent extends BaseAgent {
       throw new Error("Could not find Perplexity input element");
     }
 
-    await input.click();
-    await page.waitForTimeout(300);
+    // Use fill for textareas (works reliably), clipboard paste as fallback
+    try {
+      await input.click();
+      await page.waitForTimeout(200);
+      await input.fill(text);
+    } catch (e) {
+      this.log("fill() failed, trying clipboard paste...");
+      await this.clipboardPaste(page, input, text);
+    }
 
-    await input.fill(text);
     await page.waitForTimeout(300);
 
     // Try submit button or Enter

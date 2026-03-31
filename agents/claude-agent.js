@@ -6,7 +6,9 @@ const BaseAgent = require("./base-agent");
  * Selectors target claude.ai (March 2026):
  *   Input:    div.ProseMirror[contenteditable="true"] or fieldset .ProseMirror
  *   Send:     button[aria-label="Send Message"] or Enter key
- *   Response: [data-is-streaming] while generating, .font-claude-message for final text
+ *   Response: .font-claude-message for final text
+ *
+ * Uses clipboard paste. Stays in thread for deliberation.
  */
 class ClaudeAgent extends BaseAgent {
   constructor({ sessionsDir }) {
@@ -32,13 +34,12 @@ class ClaudeAgent extends BaseAgent {
       throw new Error("Could not find Claude input element");
     }
 
-    await input.click();
-    await page.waitForTimeout(300);
-
-    // Type using keyboard for ProseMirror contenteditable
-    for (const line of text.split("\n")) {
-      await page.keyboard.type(line, { delay: 5 });
-      await page.keyboard.press("Shift+Enter");
+    // Use clipboard paste instead of letter-by-letter typing
+    try {
+      await this.clipboardPaste(page, input, text);
+    } catch (e) {
+      this.log("Clipboard paste failed, trying direct paste...");
+      await this.directPaste(page, input, text);
     }
 
     await page.waitForTimeout(300);
@@ -55,7 +56,7 @@ class ClaudeAgent extends BaseAgent {
   }
 
   async extractResponse(page) {
-    // Wait for streaming to finish — check for absence of streaming attribute
+    // Wait for streaming to finish — get latest message
     const selectors = [
       ".font-claude-message",
       '[data-is-streaming="false"]',

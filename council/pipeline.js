@@ -7,7 +7,8 @@ const { buildMinutesPrompt, parseMinutesResponse } = require("./minutes");
  * Stages:
  *   1. Broadcast  — send prompt to all agents in parallel
  *   2. Collect    — wait for all responses, emit opening statement posts
- *   3. Deliberate — each agent replies to all others (4×3 = 12 cross-reply posts)
+ *   [PAUSE]       — wait for user to click Resume
+ *   3. Deliberate — each agent replies to all others (N×(N-1) cross-reply posts)
  *   4. Minutes    — send full thread to minutes agent, get structured minutes
  */
 class Pipeline {
@@ -18,17 +19,32 @@ class Pipeline {
    * @param {Function} opts.onLog       — callback(line) for Playwright log lines
    * @param {Function} opts.onMinutes   — callback(minutes) when minutes are ready
    * @param {Function} opts.onStageChange — callback(stage) when stage changes
+   * @param {Function} opts.onPauseForResume — callback() when pipeline pauses after collect
    */
-  constructor({ agents, onPost, onLog, onMinutes, onStageChange }) {
+  constructor({ agents, onPost, onLog, onMinutes, onStageChange, onPauseForResume }) {
     this.agents = agents;
     this.onPost = onPost || (() => {});
     this.onLog = onLog || (() => {});
     this.onMinutes = onMinutes || (() => {});
     this.onStageChange = onStageChange || (() => {});
+    this.onPauseForResume = onPauseForResume || (() => {});
+
+    // Resume mechanism — the pipeline pauses after Stage 2 and waits
+    this._resumeResolve = null;
   }
 
   log(msg) {
     this.onLog(`[Steve] ${msg}`);
+  }
+
+  /**
+   * Called by main.js when user clicks Resume.
+   */
+  resume() {
+    if (this._resumeResolve) {
+      this._resumeResolve();
+      this._resumeResolve = null;
+    }
   }
 
   /**
@@ -131,6 +147,17 @@ class Pipeline {
       return this._buildRunObject(prompt, allPosts, null, startTime, stagesCompleted);
     }
 
+    // ── PAUSE: Wait for user to click Resume ────────────
+    this.onStageChange("paused");
+    this.log("Opening statements collected. Click Resume to start deliberation.");
+    this.onPauseForResume();
+
+    await new Promise((resolve) => {
+      this._resumeResolve = resolve;
+    });
+
+    this.log("Resumed — starting deliberation...");
+
     // ── Stage 3: Deliberate ─────────────────────────────
     this.onStageChange("deliberating");
     this.log("Stage 3 — Deliberation (cross-replies)...");
@@ -141,7 +168,7 @@ class Pipeline {
         const otherHandles = otherPosts.map((p) => p.author.replace("@", ""));
         const deliberationPrompt = buildDeliberationPrompt(agent.handle, prompt, otherPosts);
 
-        this.log(`Sending deliberation prompt to @${agent.handle}...`);
+        this.log(`Sending deliberation prompt to @${agent.handle} (in same thread)...`);
         await agent.sendPrompt(deliberationPrompt);
         await agent.waitForResponse();
         const response = await agent.getResponse();
@@ -191,7 +218,7 @@ class Pipeline {
 
     try {
       const minutesPrompt = buildMinutesPrompt(prompt, allPosts, activeHandles);
-      this.log(`Sending minutes prompt to @${minutesAgent.handle}...`);
+      this.log(`Sending minutes prompt to @${minutesAgent.handle} (in same thread)...`);
       await minutesAgent.sendPrompt(minutesPrompt);
       await minutesAgent.waitForResponse();
       const minutesResponse = await minutesAgent.getResponse();
