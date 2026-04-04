@@ -1,0 +1,75 @@
+{
+  "run_id": "2026-03-03_1415_run1",
+  "status": "partial",
+  "timestamp": "2026-03-03T14:15:00Z",
+  "prompt": "Assess whether the council should add deterministic diagnostics before expanding agents.",
+  "agents_active": ["@o3", "@sonar"],
+  "stages_completed": ["broadcast", "collect", "deliberate", "minutes"],
+  "stage_timestamps": {
+    "broadcast": { "started_at": "2026-03-03T14:15:00Z", "completed_at": "2026-03-03T14:15:03Z", "status": "completed", "message": null },
+    "collect": { "started_at": "2026-03-03T14:15:03Z", "completed_at": "2026-03-03T14:15:18Z", "status": "completed", "message": null },
+    "deliberate": { "started_at": "2026-03-03T14:15:20Z", "completed_at": "2026-03-03T14:15:48Z", "status": "partial", "message": null },
+    "minutes": { "started_at": "2026-03-03T14:16:00Z", "completed_at": "2026-03-03T14:16:10Z", "status": "partial", "message": null }
+  },
+  "duration_seconds": 70,
+  "prompt_dispatches": [
+    { "dispatch_id": "d001", "stage": "opening", "round": 0, "agent": "@o3", "timestamp": "2026-03-03T14:15:01Z", "status": "sent" },
+    { "dispatch_id": "d002", "stage": "opening", "round": 0, "agent": "@sonar", "timestamp": "2026-03-03T14:15:02Z", "status": "sent" },
+    { "dispatch_id": "d003", "stage": "deliberation", "round": 1, "agent": "@o3", "timestamp": "2026-03-03T14:15:20Z", "status": "sent" },
+    { "dispatch_id": "d004", "stage": "deliberation", "round": 1, "agent": "@sonar", "timestamp": "2026-03-03T14:15:21Z", "status": "sent" },
+    { "dispatch_id": "d005", "stage": "minutes", "round": 0, "agent": "@sonar", "timestamp": "2026-03-03T14:16:00Z", "status": "sent" }
+  ],
+  "posts": [
+    { "post_id": "p001", "author": "@o3", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-03T14:15:10Z", "content": "Diagnostics should land before expanding the surface area of failures.", "raw_content": "Diagnostics should land before expanding the surface area of failures.", "word_count": 10, "capture_status": "complete", "source_dispatch_id": "d001" },
+    { "post_id": "p002", "author": "@sonar", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-03T14:15:14Z", "content": "A deterministic analyzer will make later runtime changes auditable.", "raw_content": "A deterministic analyzer will make later runtime changes auditable.", "word_count": 10, "capture_status": "complete", "source_dispatch_id": "d002" },
+    { "post_id": "p003", "author": "@o3", "stage": "deliberation", "type": "reply", "reply_to": "@sonar", "timestamp": "2026-03-03T14:15:34Z", "content": "I agree on auditability, and the first slice should stay artifact-only.", "raw_content": "I agree on auditability, and the first slice should stay artifact-only.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d003" },
+    { "post_id": "p004", "author": "@sonar", "stage": "minutes", "type": "minutes", "reply_to": null, "timestamp": "2026-03-03T14:16:05Z", "content": "Minutes response did not fully satisfy the structured schema.", "raw_content": "Minutes response did not fully satisfy the structured schema.", "word_count": 9, "capture_status": "complete", "source_dispatch_id": "d005" }
+  ],
+  "minutes": {
+    "generated_by": "@sonar",
+    "attendees": ["@o3", "@sonar"],
+    "points_of_agreement": [],
+    "points_of_disagreement": [],
+    "unresolved_questions": [],
+    "recommended_next_action": "",
+    "consensus_level": "unresolved",
+    "raw_minutes_text": "Minutes response did not fully satisfy the structured schema.",
+    "raw_response_text": "Minutes response did not fully satisfy the structured schema.",
+    "parse_status": "raw_fallback",
+    "status": "partial",
+    "source_dispatch_id": "d005",
+    "source_post_id": "p004"
+  },
+  "failures": [
+    {
+      "timestamp": "2026-03-03T14:16:10Z",
+      "agent": "@sonar",
+      "stage": "minutes",
+      "phase": "parse",
+      "message": "Minutes response did not fully satisfy the structured schema."
+    }
+  ],
+  "agent_statuses": {
+    "o3": { "handle": "@o3", "deliberation": { "post_ids": ["p003"], "raw_response_text": "", "missing_targets": [] } },
+    "sonar": {
+      "handle": "@sonar",
+      "deliberation": {
+        "post_ids": [],
+        "raw_response_text": "(No explicit reply could be reconstructed from the deliberation artifact.)",
+        "missing_targets": ["@o3"],
+        "source_dispatch_id": "d004",
+        "started_at": "2026-03-03T14:15:21Z",
+        "completed_at": "2026-03-03T14:15:48Z"
+      }
+    }
+  },
+  "deliberation": {
+    "rounds": 1,
+    "participants": ["@o3", "@sonar"],
+    "expected_reply_count": 2,
+    "actual_reply_count": 1,
+    "missing_pairs": [
+      { "from": "@sonar", "to": "@o3" }
+    ]
+  }
+}

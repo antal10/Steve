@@ -2,3 +2,4 @@ node_modules/
 sessions/
 runs/
 auth/
+diagnostics/output/

@@ -1,0 +1,66 @@
+{
+  "run_id": "2026-03-02_0910_run1",
+  "status": "partial",
+  "timestamp": "2026-03-02T09:10:00Z",
+  "prompt": "Compare prompt caching strategies for a browser-driven council.",
+  "agents_active": ["@o3", "@gemini", "@claude"],
+  "stages_completed": ["broadcast", "collect", "deliberate", "minutes"],
+  "stage_timestamps": {
+    "broadcast": { "started_at": "2026-03-02T09:10:00Z", "completed_at": "2026-03-02T09:10:04Z", "status": "completed", "message": null },
+    "collect": { "started_at": "2026-03-02T09:10:04Z", "completed_at": "2026-03-02T09:10:30Z", "status": "partial", "message": null },
+    "deliberate": { "started_at": "2026-03-02T09:10:35Z", "completed_at": "2026-03-02T09:10:55Z", "status": "completed", "message": null },
+    "minutes": { "started_at": "2026-03-02T09:11:00Z", "completed_at": "2026-03-02T09:11:18Z", "status": "completed", "message": null }
+  },
+  "duration_seconds": 78,
+  "prompt_dispatches": [
+    { "dispatch_id": "d001", "stage": "opening", "round": 0, "agent": "@o3", "timestamp": "2026-03-02T09:10:01Z", "status": "sent" },
+    { "dispatch_id": "d002", "stage": "opening", "round": 0, "agent": "@gemini", "timestamp": "2026-03-02T09:10:02Z", "status": "sent" },
+    { "dispatch_id": "d003", "stage": "opening", "round": 0, "agent": "@claude", "timestamp": "2026-03-02T09:10:03Z", "status": "sent" },
+    { "dispatch_id": "d004", "stage": "deliberation", "round": 1, "agent": "@o3", "timestamp": "2026-03-02T09:10:35Z", "status": "sent" },
+    { "dispatch_id": "d005", "stage": "deliberation", "round": 1, "agent": "@claude", "timestamp": "2026-03-02T09:10:36Z", "status": "sent" },
+    { "dispatch_id": "d006", "stage": "minutes", "round": 0, "agent": "@o3", "timestamp": "2026-03-02T09:11:00Z", "status": "sent" }
+  ],
+  "posts": [
+    { "post_id": "p001", "author": "@o3", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-02T09:10:18Z", "content": "Caching should preserve the stable system and deliberation scaffolding.", "raw_content": "Caching should preserve the stable system and deliberation scaffolding.", "word_count": 10, "capture_status": "complete", "source_dispatch_id": "d001" },
+    { "post_id": "p002", "author": "@claude", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-02T09:10:24Z", "content": "Cache keys must include stage-specific context to avoid replaying the wrong prompt.", "raw_content": "Cache keys must include stage-specific context to avoid replaying the wrong prompt.", "word_count": 13, "capture_status": "complete", "source_dispatch_id": "d003" },
+    { "post_id": "p003", "author": "@o3", "stage": "deliberation", "type": "reply", "reply_to": "@claude", "timestamp": "2026-03-02T09:10:44Z", "content": "Context keying is the hard constraint; otherwise cached prompts drift silently.", "raw_content": "Context keying is the hard constraint; otherwise cached prompts drift silently.", "word_count": 11, "capture_status": "complete", "source_dispatch_id": "d004" },
+    { "post_id": "p004", "author": "@claude", "stage": "deliberation", "type": "reply", "reply_to": "@o3", "timestamp": "2026-03-02T09:10:49Z", "content": "Agreed, and stable framing should be isolated from volatile thread content.", "raw_content": "Agreed, and stable framing should be isolated from volatile thread content.", "word_count": 11, "capture_status": "complete", "source_dispatch_id": "d005" },
+    { "post_id": "p005", "author": "@o3", "stage": "minutes", "type": "minutes", "reply_to": null, "timestamp": "2026-03-02T09:11:18Z", "content": "The surviving agents agreed that cache keys must encode stage context.", "raw_content": "The surviving agents agreed that cache keys must encode stage context.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d006" }
+  ],
+  "minutes": {
+    "generated_by": "@o3",
+    "attendees": ["@o3", "@claude"],
+    "points_of_agreement": ["Cache keys must encode stage context."],
+    "points_of_disagreement": [],
+    "unresolved_questions": ["How aggressive should cache invalidation be for live thread state?"],
+    "recommended_next_action": "Add a stage-aware cache key test matrix.",
+    "consensus_level": "moderate",
+    "raw_minutes_text": "The surviving agents agreed that cache keys must encode stage context.",
+    "raw_response_text": "{\"summary\":\"cache keys\"}",
+    "parse_status": "json",
+    "status": "completed",
+    "source_dispatch_id": "d006",
+    "source_post_id": "p005"
+  },
+  "failures": [
+    {
+      "timestamp": "2026-03-02T09:10:28Z",
+      "agent": "@gemini",
+      "stage": "collect",
+      "phase": "collect",
+      "message": "Opening response was empty."
+    }
+  ],
+  "agent_statuses": {
+    "o3": { "handle": "@o3", "deliberation": { "post_ids": ["p003"], "raw_response_text": "", "missing_targets": [] } },
+    "gemini": { "handle": "@gemini", "deliberation": { "post_ids": [], "raw_response_text": "", "missing_targets": [] } },
+    "claude": { "handle": "@claude", "deliberation": { "post_ids": ["p004"], "raw_response_text": "", "missing_targets": [] } }
+  },
+  "deliberation": {
+    "rounds": 1,
+    "participants": ["@o3", "@claude"],
+    "expected_reply_count": 2,
+    "actual_reply_count": 2,
+    "missing_pairs": []
+  }
+}

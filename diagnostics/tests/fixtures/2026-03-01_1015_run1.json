@@ -1,0 +1,64 @@
+{
+  "run_id": "2026-03-01_1015_run1",
+  "status": "completed",
+  "timestamp": "2026-03-01T10:15:00Z",
+  "prompt": "Compare retrieval-augmented generation versus tool calling for a local assistant.",
+  "agents_active": ["@o3", "@claude", "@sonar"],
+  "stages_completed": ["broadcast", "collect", "deliberate", "minutes"],
+  "stage_timestamps": {
+    "broadcast": { "started_at": "2026-03-01T10:15:00Z", "completed_at": "2026-03-01T10:15:05Z", "status": "completed", "message": null },
+    "collect": { "started_at": "2026-03-01T10:15:05Z", "completed_at": "2026-03-01T10:15:30Z", "status": "completed", "message": null },
+    "deliberate": { "started_at": "2026-03-01T10:15:40Z", "completed_at": "2026-03-01T10:16:20Z", "status": "completed", "message": null },
+    "minutes": { "started_at": "2026-03-01T10:16:30Z", "completed_at": "2026-03-01T10:16:55Z", "status": "completed", "message": null }
+  },
+  "duration_seconds": 115,
+  "prompt_dispatches": [
+    { "dispatch_id": "d001", "stage": "opening", "round": 0, "agent": "@o3", "timestamp": "2026-03-01T10:15:01Z", "status": "sent" },
+    { "dispatch_id": "d002", "stage": "opening", "round": 0, "agent": "@claude", "timestamp": "2026-03-01T10:15:02Z", "status": "sent" },
+    { "dispatch_id": "d003", "stage": "opening", "round": 0, "agent": "@sonar", "timestamp": "2026-03-01T10:15:03Z", "status": "sent" },
+    { "dispatch_id": "d004", "stage": "deliberation", "round": 1, "agent": "@o3", "timestamp": "2026-03-01T10:15:40Z", "status": "sent" },
+    { "dispatch_id": "d005", "stage": "deliberation", "round": 1, "agent": "@claude", "timestamp": "2026-03-01T10:15:41Z", "status": "sent" },
+    { "dispatch_id": "d006", "stage": "deliberation", "round": 1, "agent": "@sonar", "timestamp": "2026-03-01T10:15:42Z", "status": "sent" },
+    { "dispatch_id": "d007", "stage": "minutes", "round": 0, "agent": "@sonar", "timestamp": "2026-03-01T10:16:30Z", "status": "sent" }
+  ],
+  "posts": [
+    { "post_id": "p001", "author": "@o3", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-01T10:15:20Z", "content": "Tool calling is stronger when the workflow needs fresh external state.", "raw_content": "Tool calling is stronger when the workflow needs fresh external state.", "word_count": 11, "capture_status": "complete", "source_dispatch_id": "d001" },
+    { "post_id": "p002", "author": "@claude", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-01T10:15:24Z", "content": "RAG is better for bounded corpora where latency matters more than actionability.", "raw_content": "RAG is better for bounded corpora where latency matters more than actionability.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d002" },
+    { "post_id": "p003", "author": "@sonar", "stage": "opening", "type": "statement", "reply_to": null, "timestamp": "2026-03-01T10:15:29Z", "content": "A hybrid usually wins if retrieval stays grounded and tools stay narrow.", "raw_content": "A hybrid usually wins if retrieval stays grounded and tools stay narrow.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d003" },
+    { "post_id": "p004", "author": "@o3", "stage": "deliberation", "type": "reply", "reply_to": "@claude", "timestamp": "2026-03-01T10:15:50Z", "content": "Your latency point is right, but actions still need explicit tool boundaries.", "raw_content": "Your latency point is right, but actions still need explicit tool boundaries.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d004" },
+    { "post_id": "p005", "author": "@o3", "stage": "deliberation", "type": "reply", "reply_to": "@sonar", "timestamp": "2026-03-01T10:15:52Z", "content": "I agree on hybridization, but only if the tool layer remains auditable.", "raw_content": "I agree on hybridization, but only if the tool layer remains auditable.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d004" },
+    { "post_id": "p006", "author": "@claude", "stage": "deliberation", "type": "reply", "reply_to": "@o3", "timestamp": "2026-03-01T10:15:58Z", "content": "Fresh state matters, although many assistant requests stay inside a trusted corpus.", "raw_content": "Fresh state matters, although many assistant requests stay inside a trusted corpus.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d005" },
+    { "post_id": "p007", "author": "@claude", "stage": "deliberation", "type": "reply", "reply_to": "@sonar", "timestamp": "2026-03-01T10:16:00Z", "content": "Hybrid design works, but retrieval quality must be measured before tools compensate.", "raw_content": "Hybrid design works, but retrieval quality must be measured before tools compensate.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d005" },
+    { "post_id": "p008", "author": "@sonar", "stage": "deliberation", "type": "reply", "reply_to": "@o3", "timestamp": "2026-03-01T10:16:06Z", "content": "I agree on auditability, though retrieval can reduce needless tool invocations.", "raw_content": "I agree on auditability, though retrieval can reduce needless tool invocations.", "word_count": 11, "capture_status": "complete", "source_dispatch_id": "d006" },
+    { "post_id": "p009", "author": "@sonar", "stage": "deliberation", "type": "reply", "reply_to": "@claude", "timestamp": "2026-03-01T10:16:09Z", "content": "Latency wins matter, but a hybrid lets retrieval and actions stay specialized.", "raw_content": "Latency wins matter, but a hybrid lets retrieval and actions stay specialized.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d006" },
+    { "post_id": "p010", "author": "@sonar", "stage": "minutes", "type": "minutes", "reply_to": null, "timestamp": "2026-03-01T10:16:55Z", "content": "The council favored a hybrid design with explicit tooling and grounded retrieval.", "raw_content": "The council favored a hybrid design with explicit tooling and grounded retrieval.", "word_count": 12, "capture_status": "complete", "source_dispatch_id": "d007" }
+  ],
+  "minutes": {
+    "generated_by": "@sonar",
+    "attendees": ["@o3", "@claude", "@sonar"],
+    "points_of_agreement": ["A hybrid architecture is preferable for the target assistant."],
+    "points_of_disagreement": ["They disagree on how much retrieval can replace tools."],
+    "unresolved_questions": ["Which evaluation mix best captures latency and task success?"],
+    "recommended_next_action": "Benchmark a hybrid pipeline with fixed prompts.",
+    "consensus_level": "moderate",
+    "raw_minutes_text": "The council favored a hybrid design with explicit tooling and grounded retrieval.",
+    "raw_response_text": "{\"summary\":\"hybrid\"}",
+    "parse_status": "json",
+    "status": "completed",
+    "source_dispatch_id": "d007",
+    "source_post_id": "p010"
+  },
+  "failures": [],
+  "agent_statuses": {
+    "o3": { "handle": "@o3", "deliberation": { "post_ids": ["p004", "p005"], "raw_response_text": "", "missing_targets": [] } },
+    "claude": { "handle": "@claude", "deliberation": { "post_ids": ["p006", "p007"], "raw_response_text": "", "missing_targets": [] } },
+    "sonar": { "handle": "@sonar", "deliberation": { "post_ids": ["p008", "p009"], "raw_response_text": "", "missing_targets": [] } }
+  },
+  "deliberation": {
+    "rounds": 1,
+    "participants": ["@o3", "@claude", "@sonar"],
+    "expected_reply_count": 6,
+    "actual_reply_count": 6,
+    "missing_pairs": []
+  }
+}
