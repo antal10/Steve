@@ -1,5 +1,14 @@
 const BaseAgent = require("./base-agent");
 
+const META_COMPOSER_SELECTORS = [
+  'input[placeholder="Ask a follow up..."]',
+  'input[placeholder="Ask anything..."]',
+  'textarea[placeholder="Ask a follow up..."]',
+  'textarea[placeholder="Ask anything..."]',
+  '[contenteditable="true"][role="textbox"]',
+  '[contenteditable="true"][data-lexical-editor="true"]',
+];
+
 /**
  * Meta AI agent driver - @meta on meta.ai
  *
@@ -23,11 +32,31 @@ class MetaAgent extends BaseAgent {
     });
   }
 
-  async typeAndSubmit(page, text) {
-    let input = await page.$('input[placeholder="Ask a follow up..."]');
-    if (!input) {
-      input = await page.$('input[placeholder="Ask anything..."]');
+  async resolveComposer(page) {
+    for (const selector of META_COMPOSER_SELECTORS) {
+      const input = await page.$(selector);
+      if (input) {
+        return input;
+      }
     }
+
+    for (const selector of META_COMPOSER_SELECTORS) {
+      try {
+        await page.waitForSelector(selector, { state: "attached", timeout: 750 });
+        const input = await page.$(selector);
+        if (input) {
+          return input;
+        }
+      } catch (_) {
+        /* try the next selector */
+      }
+    }
+
+    return null;
+  }
+
+  async typeAndSubmit(page, text) {
+    let input = await this.resolveComposer(page);
 
     if (!input) {
       throw new Error("Could not find Meta AI input element");
@@ -54,7 +83,7 @@ class MetaAgent extends BaseAgent {
 
     const handledBirthdayGate = await this.completeBirthdayGate(page);
     if (handledBirthdayGate) {
-      const followUpInput = await page.$('input[placeholder="Ask a follow up..."]');
+      const followUpInput = await this.resolveComposer(page);
       const threadAdvanced = /\/prompt\//.test(page.url()) || Boolean(followUpInput);
 
       if (!threadAdvanced) {
