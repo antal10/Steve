@@ -19,7 +19,7 @@ function buildHeadingPatterns(handle) {
   ];
 
   return prefixes.map((prefix) => {
-    const marker = String.raw`^\s*(?:[-*]\s*|#{1,6}\s*|\d+[\.\)]\s*)*(?:\*\*|__)?${prefix}@${escapedHandle}(?:\*\*|__)?\s*(?::|-|–|—)?\s*`;
+    const marker = String.raw`^\s*(?:[-*]\s*|#{1,6}\s*|\d+[\.\)]\s*)*(?:\*\*|__)?${prefix}@${escapedHandle}\b(?:\*\*|__)?\s*(?::|-|–|—)?\s*`;
     return new RegExp(marker, "i");
   });
 }
@@ -61,6 +61,25 @@ function makeReplyPost(authorHandle, targetHandle, content, basePostId, index, t
     content: cleanContent,
     word_count: cleanContent.split(/\s+/).filter(Boolean).length,
   };
+}
+
+function remapSingleSelfTarget(authorHandle, expectedHandles, contentByTarget) {
+  const normalized = new Map(contentByTarget);
+  const unexpectedTargets = [...normalized.keys()].filter((target) => !expectedHandles.includes(target));
+  const missingTargets = expectedHandles.filter((target) => !normalized.has(target));
+
+  if (
+    unexpectedTargets.length === 1
+    && unexpectedTargets[0] === authorHandle
+    && missingTargets.length === 1
+    && normalized.size === expectedHandles.length
+  ) {
+    const selfReply = normalized.get(authorHandle);
+    normalized.delete(authorHandle);
+    normalized.set(missingTargets[0], selfReply);
+  }
+
+  return normalized;
 }
 
 /**
@@ -110,17 +129,20 @@ function buildDeliberationPrompt(agentHandle, prompt, otherPosts) {
  * @param {Array}  otherHandles  - handles of the other agents (e.g. ["gemini", "copilot", "claude", "sonar"])
  * @param {string} basePostId    - base post ID prefix for numbering
  * @param {number} startIndex    - starting post index
- * @returns {Array}              - array of post objects
+ * @returns {object}             - parsed reply posts plus missing-target metadata
  */
 function parseDeliberationResponse(authorHandle, response, otherHandles, basePostId, startIndex) {
   const posts = [];
   const now = new Date().toISOString();
   const sections = [];
   const lines = response.split(/\r?\n/);
+  const candidateHandles = otherHandles.includes(authorHandle)
+    ? otherHandles.slice()
+    : [...otherHandles, authorHandle];
   let currentSection = null;
 
   for (const line of lines) {
-    const heading = detectReplyHeading(line, otherHandles);
+    const heading = detectReplyHeading(line, candidateHandles);
     if (heading) {
       if (currentSection) {
         sections.push(currentSection);
@@ -156,44 +178,44 @@ function parseDeliberationResponse(authorHandle, response, otherHandles, basePos
     }
   }
 
-  for (const [targetHandle, content] of mergedByTarget.entries()) {
+  const normalizedTargets = remapSingleSelfTarget(authorHandle, otherHandles, mergedByTarget);
+
+  for (const [targetHandle, content] of normalizedTargets.entries()) {
     posts.push(
       makeReplyPost(authorHandle, targetHandle, content, basePostId, startIndex + posts.length, now)
     );
   }
 
   if (posts.length === 0) {
-    const paragraphs = splitIntoParagraphs(response);
-    const chunks = paragraphs.length > 0 ? paragraphs : [response.trim()];
-    const perAgent = Math.max(1, Math.ceil(chunks.length / otherHandles.length));
-
-    for (let i = 0; i < otherHandles.length; i++) {
-      const content = chunks.slice(i * perAgent, (i + 1) * perAgent).join("\n\n").trim() || response.trim();
+    const cleanResponse = response.trim();
+    if (cleanResponse && otherHandles.length === 1) {
       posts.push(
-        makeReplyPost(authorHandle, otherHandles[i], content, basePostId, startIndex + i, now)
+        makeReplyPost(authorHandle, otherHandles[0], cleanResponse, basePostId, startIndex, now)
       );
+
+      return {
+        posts,
+        parse_mode: "single_target_fallback",
+        missing_targets: [],
+      };
     }
 
-    return posts;
+    return {
+      posts: [],
+      parse_mode: "unparsed",
+      missing_targets: otherHandles.slice(),
+    };
   }
 
   const addressed = new Set(posts.map((post) => post.reply_to.replace("@", "")));
-  for (const handle of otherHandles) {
-    if (!addressed.has(handle)) {
-      posts.push(
-        makeReplyPost(
-          authorHandle,
-          handle,
-          "(No explicit reply to this agent.)",
-          basePostId,
-          startIndex + posts.length,
-          now
-        )
-      );
-    }
-  }
+  const missingTargets = otherHandles.filter((handle) => !addressed.has(handle));
 
-  return posts;
+  return {
+    posts,
+    parse_mode: sections.length > 0 ? "headed" : "merged",
+    missing_targets: missingTargets,
+  };
 }
 
 module.exports = { buildDeliberationPrompt, parseDeliberationResponse };
+
