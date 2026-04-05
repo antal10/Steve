@@ -1,12 +1,31 @@
 const BaseAgent = require("./base-agent");
 
+const CLAUDE_RESPONSE_SELECTORS = [
+  {
+    label: "assistant-markdown",
+    selector: ".font-claude-response .standard-markdown",
+  },
+  {
+    label: "assistant-progressive-markdown",
+    selector: ".font-claude-response .progressive-markdown",
+  },
+  {
+    label: "assistant-body-paragraph",
+    selector: "p.font-claude-response-body",
+  },
+  {
+    label: "assistant-container",
+    selector: ".font-claude-response",
+  },
+];
+
 /**
- * Claude agent driver — @claude on claude.ai
+ * Claude agent driver - @claude on claude.ai
  *
- * Selectors target claude.ai (March 2026):
+ * Selectors target claude.ai (April 2026):
  *   Input:    div.ProseMirror[contenteditable="true"] or fieldset .ProseMirror
  *   Send:     button[aria-label="Send Message"] or Enter key
- *   Response: .font-claude-message for final text
+ *   Response: .font-claude-response markdown containers
  *
  * Uses clipboard paste. Stays in thread for deliberation.
  */
@@ -18,6 +37,7 @@ class ClaudeAgent extends BaseAgent {
       siteUrl: "https://claude.ai",
       sessionsDir,
     });
+    this._lastResponseMatchLabel = "";
   }
 
   async typeAndSubmit(page, text) {
@@ -56,21 +76,46 @@ class ClaudeAgent extends BaseAgent {
   }
 
   async extractResponse(page) {
-    // Wait for streaming to finish — get latest message
-    const selectors = [
-      ".font-claude-message",
-      '[data-is-streaming="false"]',
-      ".prose",
-    ];
+    for (const candidate of CLAUDE_RESPONSE_SELECTORS) {
+      const match = await page.$$eval(candidate.selector, (nodes) => {
+        const isVisible = (node) => {
+          const style = window.getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style &&
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        };
 
-    for (const sel of selectors) {
-      const elements = await page.$$(sel);
-      if (elements.length > 0) {
-        const last = elements[elements.length - 1];
-        const text = await last.innerText();
-        if (text && text.trim().length > 0) {
-          return text.trim();
+        for (let index = nodes.length - 1; index >= 0; index -= 1) {
+          const node = nodes[index];
+          if (!isVisible(node) || node.closest('[data-testid="user-message"]')) {
+            continue;
+          }
+
+          const text = (node.innerText || node.textContent || "")
+            .replace(/\u200B/g, "")
+            .trim();
+
+          if (!text) {
+            continue;
+          }
+
+          return { index, text };
         }
+
+        return null;
+      });
+
+      if (match?.text) {
+        if (this._lastResponseMatchLabel !== candidate.label) {
+          this._lastResponseMatchLabel = candidate.label;
+          this.log(`Claude response matched via ${candidate.label} (${candidate.selector}).`);
+        }
+        return match.text;
       }
     }
 
