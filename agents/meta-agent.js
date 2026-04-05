@@ -1,13 +1,22 @@
 const BaseAgent = require("./base-agent");
 
 const META_COMPOSER_SELECTORS = [
-  'input[placeholder="Ask a follow up..."]',
-  'input[placeholder="Ask anything..."]',
-  'textarea[placeholder="Ask a follow up..."]',
-  'textarea[placeholder="Ask anything..."]',
   '[contenteditable="true"][role="textbox"]',
   '[contenteditable="true"][data-lexical-editor="true"]',
+  'textarea[placeholder="Ask a follow up..."]',
+  'textarea[placeholder="Ask anything..."]',
+  'input[placeholder="Ask a follow up..."]',
+  'input[placeholder="Ask anything..."]',
 ];
+const META_FOLLOW_UP_SELECTORS = [
+  'textarea[placeholder="Ask a follow up..."]',
+  'input[placeholder="Ask a follow up..."]',
+];
+const META_SEND_BUTTON_SELECTOR = 'button[aria-label="Send"]';
+
+function normalizeComposerText(value) {
+  return String(value || "").replace(/\r\n/g, "\n").trim();
+}
 
 /**
  * Meta AI agent driver - @meta on meta.ai
@@ -33,65 +42,200 @@ class MetaAgent extends BaseAgent {
   }
 
   async resolveComposer(page) {
-    for (const selector of META_COMPOSER_SELECTORS) {
-      const input = await page.$(selector);
-      if (input) {
-        return input;
-      }
-    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (const selector of META_COMPOSER_SELECTORS) {
+        const candidates = page.locator(selector);
+        const count = await candidates.count();
 
-    for (const selector of META_COMPOSER_SELECTORS) {
-      try {
-        await page.waitForSelector(selector, { state: "attached", timeout: 750 });
-        const input = await page.$(selector);
-        if (input) {
-          return input;
+        for (let index = 0; index < count; index++) {
+          const locator = candidates.nth(index);
+          const descriptor = await this.inspectComposer(locator, selector, index);
+          if (descriptor) {
+            return {
+              locator,
+              descriptor,
+            };
+          }
         }
-      } catch (_) {
-        /* try the next selector */
+      }
+
+      if (attempt < 2) {
+        await page.waitForTimeout(250);
       }
     }
 
     return null;
   }
 
-  async typeAndSubmit(page, text) {
-    let input = await this.resolveComposer(page);
+  async inspectComposer(locator, selector, index) {
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) {
+      return null;
+    }
 
-    if (!input) {
+    return locator.evaluate((node, meta) => {
+      const tagName = String(node.tagName || "").toLowerCase();
+      const disabled = "disabled" in node ? Boolean(node.disabled) : node.getAttribute("aria-disabled") === "true";
+      const readOnly = "readOnly" in node ? Boolean(node.readOnly) : false;
+      const contentEditable = Boolean(node.isContentEditable);
+      const editable = !disabled && !readOnly && (
+        tagName === "input"
+        || tagName === "textarea"
+        || contentEditable
+      );
+
+      if (!editable) {
+        return null;
+      }
+
+      return {
+        selector: meta.selector,
+        index: meta.index,
+        tagName,
+        contentEditable,
+      };
+    }, { selector, index }).catch(() => null);
+  }
+
+  async readComposerText(composer) {
+    return composer.locator.evaluate((node) => {
+      const tagName = String(node.tagName || "").toLowerCase();
+      if (tagName === "input" || tagName === "textarea") {
+        return node.value || "";
+      }
+
+      return node.innerText || node.textContent || "";
+    });
+  }
+
+  async setComposerText(composer, text) {
+    await composer.locator.evaluate((node, value) => {
+      const nextValue = String(value || "");
+      const tagName = String(node.tagName || "").toLowerCase();
+
+      node.focus();
+
+      if (tagName === "input" || tagName === "textarea") {
+        node.value = nextValue;
+        node.dispatchEvent(new Event("input", { bubbles: true }));
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+        return;
+      }
+
+      if (node.isContentEditable) {
+        node.textContent = nextValue;
+        node.dispatchEvent(new InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data: nextValue,
+        }));
+      }
+    }, text);
+  }
+
+  async verifyComposerText(composer, text) {
+    const expected = normalizeComposerText(text);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actual = normalizeComposerText(await this.readComposerText(composer));
+      if (actual === expected || actual.includes(expected)) {
+        return true;
+      }
+
+      if (attempt < 2) {
+        await this.page.waitForTimeout(150);
+      }
+    }
+
+    return false;
+  }
+
+  async populateComposer(page, text) {
+    const composer = await this.resolveComposer(page);
+    if (!composer) {
       throw new Error("Could not find Meta AI input element");
     }
 
+    const descriptor = `${composer.descriptor.tagName}${composer.descriptor.contentEditable ? "[contenteditable]" : ""} via ${composer.descriptor.selector}`;
+    this.log(`Using Meta composer ${descriptor}.`);
+
+    await composer.locator.scrollIntoViewIfNeeded().catch(() => {});
+
     try {
-      await input.click();
-      await page.waitForTimeout(200);
-      await input.fill(text);
-    } catch (e) {
-      this.log("fill() failed, trying clipboard paste...");
-      await this.clipboardPaste(page, input, text);
+      await composer.locator.fill(text, { timeout: 5000 });
+    } catch (_) {
+      this.log(`Meta composer fill() failed for ${composer.descriptor.selector}; trying direct set...`);
+      await this.setComposerText(composer, text);
     }
 
-    await page.waitForTimeout(300);
+    if (!(await this.verifyComposerText(composer, text))) {
+      await this.setComposerText(composer, text);
+      if (!(await this.verifyComposerText(composer, text))) {
+        throw new Error(`Meta composer text did not land in ${composer.descriptor.selector}`);
+      }
+    }
 
-    const sendBtn = await page.$('button[aria-label="Send"]');
+    return composer;
+  }
+
+  async resolveSendButton(page) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const candidates = page.locator(META_SEND_BUTTON_SELECTOR);
+      const count = await candidates.count();
+
+      for (let index = 0; index < count; index++) {
+        const button = candidates.nth(index);
+        const visible = await button.isVisible().catch(() => false);
+        const enabled = await button.isEnabled().catch(() => false);
+        if (visible && enabled) {
+          return button;
+        }
+      }
+
+      if (attempt < 2) {
+        await page.waitForTimeout(250);
+      }
+    }
+
+    return null;
+  }
+
+  async hasFollowUpComposer(page) {
+    for (const selector of META_FOLLOW_UP_SELECTORS) {
+      const locator = page.locator(selector).first();
+      const visible = await locator.isVisible().catch(() => false);
+      if (visible) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  async clickSendButton(page) {
+    const sendBtn = await this.resolveSendButton(page);
     if (!sendBtn) {
       throw new Error("Could not find Meta AI send button");
     }
 
-    await sendBtn.click();
+    await sendBtn.click({ timeout: 5000 });
+  }
+
+  async typeAndSubmit(page, text) {
+    await this.populateComposer(page, text);
+    await page.waitForTimeout(300);
+    await this.clickSendButton(page);
     await page.waitForTimeout(500);
 
     const handledBirthdayGate = await this.completeBirthdayGate(page);
     if (handledBirthdayGate) {
-      const followUpInput = await this.resolveComposer(page);
-      const threadAdvanced = /\/prompt\//.test(page.url()) || Boolean(followUpInput);
+      const threadAdvanced = /\/prompt\//.test(page.url()) || await this.hasFollowUpComposer(page);
 
       if (!threadAdvanced) {
-        const retrySendBtn = await page.$('button[aria-label="Send"]');
-        if (retrySendBtn) {
-          await retrySendBtn.click();
-          await page.waitForTimeout(500);
-        }
+        await this.populateComposer(page, text);
+        await page.waitForTimeout(300);
+        await this.clickSendButton(page);
+        await page.waitForTimeout(500);
       }
     }
 
