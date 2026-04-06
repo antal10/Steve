@@ -40,7 +40,52 @@ class ClaudeAgent extends BaseAgent {
     this._lastResponseMatchLabel = "";
   }
 
+  getLatestClaudePage() {
+    if (!this.context || typeof this.context.pages !== "function") {
+      return null;
+    }
+
+    const pages = this.context.pages().filter((page) => {
+      try {
+        return !page.isClosed();
+      } catch (_) {
+        return false;
+      }
+    });
+
+    if (!pages.length) {
+      return null;
+    }
+
+    const claudePages = pages.filter((page) => {
+      try {
+        return String(page.url() || "").includes("claude.ai");
+      } catch (_) {
+        return false;
+      }
+    });
+
+    return claudePages[claudePages.length - 1] || pages[pages.length - 1];
+  }
+
+  async rebindActiveClaudePage(reason) {
+    const latestPage = this.getLatestClaudePage();
+    if (!latestPage) {
+      return false;
+    }
+
+    if (latestPage !== this.page) {
+      this.page = latestPage;
+      this.log(`Claude rebound active page for ${reason}: ${this.page.url() || "about:blank"}.`);
+    }
+
+    return true;
+  }
+
   async typeAndSubmit(page, text) {
+    await this.rebindActiveClaudePage("pre-submit");
+    page = this.page || page;
+
     // Try primary input selector
     let input = await page.$('div.ProseMirror[contenteditable="true"]');
     if (!input) {
@@ -63,6 +108,8 @@ class ClaudeAgent extends BaseAgent {
     }
 
     await page.waitForTimeout(300);
+    await this.rebindActiveClaudePage("post-input");
+    page = this.page || page;
 
     // Try the send button first
     const sendBtn = await page.$('button[aria-label="Send Message"]');
@@ -72,7 +119,15 @@ class ClaudeAgent extends BaseAgent {
       await page.keyboard.press("Enter");
     }
 
+    await page.waitForTimeout(300);
+    await this.rebindActiveClaudePage("post-submit");
+
     this.log("Prompt sent via Claude interface.");
+  }
+
+  async waitForResponse() {
+    await this.rebindActiveClaudePage("collect-start");
+    return super.waitForResponse();
   }
 
   async extractResponse(page) {
