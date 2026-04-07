@@ -17,7 +17,7 @@ class ChatGPTAgent extends BaseAgent {
     this.model = model; // currently "o3-pro"
   }
 
-  async resolveSendButton(page, timeoutMs = 3000) {
+  async resolveSendButton(page, timeoutMs = 5000) {
     const selectors = [
       'button[data-testid="send-button"]',
       'button[aria-label="Send prompt"]',
@@ -52,6 +52,41 @@ class ChatGPTAgent extends BaseAgent {
     return null;
   }
 
+  async clickSendButton(page, initialControl = null) {
+    let lastError = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const sendControl = attempt === 0
+        ? initialControl || await this.resolveSendButton(page, 5000)
+        : await this.resolveSendButton(page, 3000);
+
+      if (!sendControl) {
+        continue;
+      }
+
+      try {
+        await sendControl.locator.scrollIntoViewIfNeeded().catch(() => {});
+        await page.waitForTimeout(200);
+        await sendControl.locator.click({ timeout: 5000 });
+        this.log(
+          attempt === 0
+            ? `ChatGPT send used button locator (${sendControl.selector}).`
+            : `ChatGPT send used button locator (${sendControl.selector}) after re-resolve.`
+        );
+        return true;
+      } catch (err) {
+        lastError = err;
+        await page.waitForTimeout(250);
+      }
+    }
+
+    if (lastError) {
+      this.log(`ChatGPT send button click timed out; falling back to Enter. ${lastError.message}`);
+    }
+
+    return false;
+  }
+
   async typeAndSubmit(page, text) {
     let input = await page.$("#prompt-textarea");
     if (!input) {
@@ -72,10 +107,8 @@ class ChatGPTAgent extends BaseAgent {
     await page.waitForTimeout(300);
 
     const sendControl = await this.resolveSendButton(page);
-    if (sendControl) {
-      await sendControl.locator.click({ timeout: 1500 });
-      this.log(`ChatGPT send used button locator (${sendControl.selector}).`);
-    } else {
+    const clickedSendButton = await this.clickSendButton(page, sendControl);
+    if (!clickedSendButton) {
       await page.keyboard.press("Enter");
       this.log("ChatGPT send used Enter fallback.");
     }
