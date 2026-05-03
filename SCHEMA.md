@@ -1,8 +1,11 @@
 # Steve - JSON Schema
 
-All data lives in `runs/` as one JSON file per council session.
+All data lives in `runs/`. V1 writes one JSON file per council session. A
+future-compatible folder layout is described at the bottom of this document
+and is documented in detail in `docs/debate_artifacts.md`. Both shapes are
+valid; the single-file shape remains the source of truth for V1 paid runs.
 
-## Run File
+## Run File (V1, single-file)
 
 One file per council session: `runs/YYYY-MM-DD_HHMM_runN.json`
 
@@ -92,3 +95,37 @@ With the full 7-agent roster enabled, Stage 3 produces a `7 x 7` matrix minus th
 | **@grok**    | yes | yes     | yes      | yes     | yes    | yes   | -     |
 
 Each `yes` corresponds to one post with `stage: "deliberation"`, `type: "reply"`, and `reply_to: "@target"`.
+
+## Run Folder (future-compatible)
+
+The single-file shape above stays valid. When the artifact writer lands, runs
+will optionally be saved as a folder instead, keyed by the same `run_id`:
+
+```text
+runs/2026-05-03_1145_run1/
+  run.json                  # same shape as the V1 single-file Run File above
+  prompt_packet.json        # frozen prompt + roster + run config + content_hash
+  events.jsonl              # append-only ledger of state transitions
+  posts/                    # one file per post; verbatim agent text
+  packets/                  # exact bytes broadcast to each round
+  matrices/                 # CSV ledger views (no body text in cells)
+    opening_matrix.csv
+    cross_reply_matrix.csv
+    reception_matrix.csv
+  minutes.json              # same shape as the V1 minutes object
+  deviation_report.json     # optional, only when local preflight also runs
+```
+
+Rules:
+
+- `run.json` inside the folder MUST be readable by any consumer of the V1
+  single-file shape. Adding the folder around it is additive.
+- JSON / JSONL files are canonical. CSV matrices are derived views and can be
+  regenerated from the JSON / JSONL files at any time.
+- Verbatim agent responses live in `posts/*.md`, never inside CSV cells.
+- Round N is frozen (all posts written, `round_frozen` event emitted) before
+  Round N+1's packet is composed. Every recipient of a given round sees the
+  same `content_hash`.
+
+See `docs/debate_artifacts.md` for the full contract and barrier rules. None
+of this is implemented yet; V1 runs continue to write the single-file shape.
