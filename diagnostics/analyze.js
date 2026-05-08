@@ -10,9 +10,21 @@ const { emitEvents } = require("./lib/event-emitter");
 const { indexRun } = require("./lib/run-indexer");
 const { aggregate } = require("./lib/aggregator");
 
+function resolveDefaultRunsDir() {
+  const localAppData = String(process.env.LOCALAPPDATA || "").trim();
+  if (localAppData) {
+    const appDataRunsDir = path.join(localAppData, "SteveApp", "run-artifacts");
+    if (fs.existsSync(appDataRunsDir)) {
+      return appDataRunsDir;
+    }
+  }
+
+  return path.resolve(__dirname, "..", "runs");
+}
+
 function parseArgs(argv) {
   const args = argv.slice(2);
-  let runsDir = path.resolve(process.cwd(), "runs");
+  let runsDir = resolveDefaultRunsDir();
 
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -30,6 +42,7 @@ function parseArgs(argv) {
 
     if (arg === "--help") {
       process.stdout.write("Usage: node diagnostics/analyze.js [--runs-dir <path>]\n");
+      process.stdout.write("Default runs dir: %LOCALAPPDATA%\\SteveApp\\run-artifacts when present, else <repo>\\runs\n");
       process.exit(0);
     }
 

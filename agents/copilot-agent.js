@@ -1,5 +1,64 @@
 const BaseAgent = require("./base-agent");
 
+const COPILOT_MAX_PROMPT_CHARS = 9800;
+const COPILOT_TRUNCATION_MARKER = "\n\n[... middle truncated for Copilot limit ...]\n\n";
+const BODY_TRUNCATION_MARKERS = [
+  {
+    start: "Here are the other agents' opening statements:\n\n",
+    end: "\nReply to every other agent separately",
+  },
+  {
+    start: "Here is the full council thread:\n\n",
+    end: "\nReturn exactly one valid JSON object",
+  },
+];
+
+function truncateMiddle(text, maxChars) {
+  const keepChars = maxChars - COPILOT_TRUNCATION_MARKER.length;
+  const headChars = Math.ceil(keepChars / 2);
+  const tailChars = Math.floor(keepChars / 2);
+  return `${text.slice(0, headChars)}${COPILOT_TRUNCATION_MARKER}${text.slice(text.length - tailChars)}`;
+}
+
+function truncateBetweenMarkers(text, maxChars, markers) {
+  const startIndex = text.indexOf(markers.start);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const bodyStart = startIndex + markers.start.length;
+  const endIndex = text.indexOf(markers.end, bodyStart);
+  if (endIndex === -1 || endIndex <= bodyStart) {
+    return null;
+  }
+
+  const prefix = text.slice(0, bodyStart);
+  const body = text.slice(bodyStart, endIndex);
+  const suffix = text.slice(endIndex);
+  const availableForBody = maxChars - prefix.length - suffix.length;
+
+  if (availableForBody <= COPILOT_TRUNCATION_MARKER.length + 32) {
+    return null;
+  }
+
+  return `${prefix}${truncateMiddle(body, availableForBody)}${suffix}`;
+}
+
+function truncateCopilotPrompt(text) {
+  if (text.length <= COPILOT_MAX_PROMPT_CHARS) {
+    return text;
+  }
+
+  for (const markers of BODY_TRUNCATION_MARKERS) {
+    const truncated = truncateBetweenMarkers(text, COPILOT_MAX_PROMPT_CHARS, markers);
+    if (truncated && truncated.length === COPILOT_MAX_PROMPT_CHARS) {
+      return truncated;
+    }
+  }
+
+  return truncateMiddle(text, COPILOT_MAX_PROMPT_CHARS);
+}
+
 /**
  * Copilot agent driver — @copilot on copilot.microsoft.com
  *
@@ -20,6 +79,23 @@ class CopilotAgent extends BaseAgent {
       siteUrl: "https://copilot.microsoft.com",
       sessionsDir,
     });
+  }
+
+  async preparePrompt(text) {
+    const originalText = String(text);
+    const truncatedText = truncateCopilotPrompt(originalText);
+
+    if (truncatedText !== originalText) {
+      this.onLog(`[copilot] Prompt truncated: ${originalText.length} → ${COPILOT_MAX_PROMPT_CHARS} chars`);
+    }
+
+    return {
+      text: truncatedText,
+      meta: {
+        truncation_limit: COPILOT_MAX_PROMPT_CHARS,
+        truncated_from_chars: truncatedText === originalText ? null : originalText.length,
+      },
+    };
   }
 
   async typeAndSubmit(page, text) {

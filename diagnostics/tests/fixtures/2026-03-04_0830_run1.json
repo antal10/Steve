@@ -4,7 +4,6 @@
   "prompt": "Check whether the analyzer can reconstruct a native partial run without runtime status metadata.",
   "agents_active": ["@o3", "@claude"],
   "stages_completed": ["broadcast", "collect"],
-  "duration_seconds": 22,
   "posts": [
     {
       "post_id": "p001",
@@ -13,11 +12,7 @@
       "type": "statement",
       "reply_to": null,
       "timestamp": "2026-03-04T08:30:12Z",
-      "content": "The analyzer should derive partial completion from the truncated stage list.",
-      "raw_content": "The analyzer should derive partial completion from the truncated stage list.",
-      "word_count": 11,
-      "capture_status": "complete",
-      "source_dispatch_id": null
+      "content": "The analyzer should derive partial completion from the truncated stage list."
     },
     {
       "post_id": "p002",
@@ -26,11 +21,7 @@
       "type": "statement",
       "reply_to": null,
       "timestamp": "2026-03-04T08:30:15Z",
-      "content": "Stage-based fallback should work even when Steve-native status fields are absent.",
-      "raw_content": "Stage-based fallback should work even when Steve-native status fields are absent.",
-      "word_count": 11,
-      "capture_status": "complete",
-      "source_dispatch_id": null
+      "content": "Stage-based fallback should work even when Steve-native status fields are absent."
     }
   ],
   "minutes": {},

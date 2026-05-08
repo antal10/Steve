@@ -1,5 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const { app, BrowserWindow, ipcMain } = require("electron");
 
 const ChatGPTAgent = require("./agents/chatgpt-agent");
 const ClaudeAgent = require("./agents/claude-agent");
@@ -10,34 +12,127 @@ const MetaAgent = require("./agents/meta-agent");
 const GrokAgent = require("./agents/grok-agent");
 const Pipeline = require("./council/pipeline");
 const { saveRun } = require("./council/run-store");
+const {
+  assertNoLegacyRepoRuntimeDirs,
+  assertPathInsideUserDataRoot,
+  configureRuntimePaths,
+  getConfigDir,
+  getLogsDir,
+  getProviderProfileDir,
+  getUserDataRoot,
+} = require("./runtime/runtime-paths");
 
-const SESSIONS_DIR = path.join(__dirname, "sessions");
+const APP_NAME = "SteveApp";
+const TOKEN_LIKE_PATTERN = /\b(?:eyJ[A-Za-z0-9._-]{10,}|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/_-]{40,})\b/g;
 
 let mainWindow;
 let activePipeline = null;
+let appLogFilePath = null;
+let appLogWriteFailed = false;
+
+app.setName(APP_NAME);
+if (!process.env.STEVE_USER_DATA_ROOT && String(process.env.STEVE_ENV || "").toLowerCase() !== "test") {
+  const localAppData = String(process.env.LOCALAPPDATA || "").trim();
+  if (!localAppData) {
+    throw new Error("LOCALAPPDATA is unavailable. Steve requires a Windows local app data root.");
+  }
+
+  app.setPath("userData", path.join(localAppData, APP_NAME));
+}
+const configuredUserDataRoot = configureRuntimePaths({
+  app,
+  projectRoot: __dirname,
+  userDataRoot: String(process.env.STEVE_USER_DATA_ROOT || "").trim() || undefined,
+});
+app.setPath("userData", configuredUserDataRoot);
+
+function sanitizeLogMessage(message) {
+  return String(message || "")
+    .replace(/((?:set-)?cookie\s*[:=]\s*)([^\r\n]+)/gi, "$1[REDACTED]")
+    .replace(/((?:authorization|x-api-key)\s*[:=]\s*)([^\r\n]+)/gi, "$1[REDACTED]")
+    .replace(/\b(bearer)\s+[A-Za-z0-9._~+/-]+\b/gi, "$1 [REDACTED]")
+    .replace(/\b((?:session(?:id)?|sid|access_token|refresh_token|id_token|token)\s*[:=]\s*)([^\s,;]+)/gi, "$1[REDACTED]")
+    .replace(TOKEN_LIKE_PATTERN, "[REDACTED_TOKEN]");
+}
+
+function buildAppLogFilePath() {
+  return assertPathInsideUserDataRoot(
+    path.join(getLogsDir(), "steve-live.log"),
+    "main process log file"
+  );
+}
+
+function writeAppLog(level, message) {
+  const sanitizedMessage = sanitizeLogMessage(message);
+  const line = `${new Date().toISOString()} [${level}] ${sanitizedMessage}`;
+
+  if (appLogFilePath) {
+    try {
+      fs.appendFileSync(appLogFilePath, `${line}${os.EOL}`, "utf-8");
+    } catch (err) {
+      if (!appLogWriteFailed) {
+        appLogWriteFailed = true;
+        console.error(
+          `${new Date().toISOString()} [ERROR] Failed to append Steve live log file: ${err.message}`
+        );
+      }
+    }
+  }
+
+  if (level === "ERROR") {
+    console.error(line);
+  } else {
+    console.log(line);
+  }
+
+  return sanitizedMessage;
+}
+
+function relayLogToRenderer(message, level = "INFO") {
+  const sanitizedMessage = writeAppLog(level, message);
+  sendToRenderer("steve-log", sanitizedMessage);
+}
+
+function initializeRuntimeState() {
+  const electronSessionDataDir = assertPathInsideUserDataRoot(
+    path.join(getConfigDir(), "electron-session"),
+    "Electron session data directory"
+  );
+  fs.mkdirSync(electronSessionDataDir, { recursive: true });
+  app.setPath("sessionData", electronSessionDataDir);
+
+  const logsDir = getLogsDir();
+  app.setAppLogsPath(logsDir);
+  appLogFilePath = buildAppLogFilePath();
+
+  assertNoLegacyRepoRuntimeDirs();
+  writeAppLog("INFO", `Steve runtime state initialized under ${getUserDataRoot()}.`);
+}
 
 function createAgent(handle) {
+  const profileDir = getProviderProfileDir(handle);
+
   switch (handle) {
     case "o3":
       return new ChatGPTAgent({
         handle: "o3",
         name: "ChatGPT o3-pro",
         siteUrl: "https://chatgpt.com",
-        sessionsDir: SESSIONS_DIR,
+        sessionsDir: profileDir,
         model: "o3-pro",
       });
     case "claude":
-      return new ClaudeAgent({ sessionsDir: SESSIONS_DIR });
+      return new ClaudeAgent({ sessionsDir: profileDir });
     case "sonar":
-      return new PerplexityAgent({ sessionsDir: SESSIONS_DIR });
+      return new PerplexityAgent({ sessionsDir: profileDir });
     case "gemini":
-      return new GeminiAgent({ sessionsDir: SESSIONS_DIR });
+      return new GeminiAgent({ sessionsDir: profileDir });
     case "copilot":
-      return new CopilotAgent({ sessionsDir: SESSIONS_DIR });
+      return new CopilotAgent({ sessionsDir: profileDir });
     case "meta":
-      return new MetaAgent({ sessionsDir: SESSIONS_DIR });
+      return new MetaAgent({ sessionsDir: profileDir });
     case "grok":
-      return new GrokAgent({ sessionsDir: SESSIONS_DIR });
+      return new GrokAgent({ sessionsDir: profileDir });
     default:
       throw new Error(`Unknown agent handle: ${handle}`);
   }
@@ -64,7 +159,21 @@ function sendToRenderer(channel, payload) {
   }
 }
 
-app.whenReady().then(createWindow);
+async function bootApplication() {
+  try {
+    initializeRuntimeState();
+    createWindow();
+  } catch (err) {
+    writeAppLog("ERROR", `Startup failed: ${err.message}`);
+    throw err;
+  }
+}
+
+app.whenReady()
+  .then(bootApplication)
+  .catch(() => {
+    app.exit(1);
+  });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -80,30 +189,30 @@ app.on("activate", () => {
 
 ipcMain.handle("run-council", async (_event, { prompt, agents: agentHandles }) => {
   if (activePipeline) {
-    sendToRenderer("steve-log", "[Steve] A council run is already in progress.");
+    relayLogToRenderer("[Steve] A council run is already in progress.", "WARN");
     return { error: "Run already in progress" };
   }
 
-  console.log(`[Steve] Council convened - prompt: "${prompt}", agents: ${agentHandles}`);
+  writeAppLog("INFO", `[Steve] Council convened with ${agentHandles.length} agents.`);
 
   const agents = [];
   for (const handle of agentHandles) {
     try {
       agents.push(createAgent(handle));
     } catch (err) {
-      console.error(`[Steve] Failed to create agent ${handle}: ${err.message}`);
+      writeAppLog("ERROR", `[Steve] Failed to create agent ${handle}: ${err.message}`);
     }
   }
 
   if (agents.length === 0) {
-    sendToRenderer("steve-log", "[Steve] No valid agents to run.");
+    relayLogToRenderer("[Steve] No valid agents to run.", "ERROR");
     return { error: "No valid agents" };
   }
 
   const pipeline = new Pipeline({
     agents,
     onPost: (post) => sendToRenderer("post-arrived", post),
-    onLog: (line) => sendToRenderer("steve-log", line),
+    onLog: (line) => relayLogToRenderer(line),
     onMinutes: (minutes) => sendToRenderer("minutes-ready", minutes),
     onStageChange: (stage) => sendToRenderer("stage-changed", stage),
     onPauseForResume: () => sendToRenderer("pause-for-resume"),
@@ -116,9 +225,9 @@ ipcMain.handle("run-council", async (_event, { prompt, agents: agentHandles }) =
 
     try {
       const filename = saveRun(runData);
-      sendToRenderer("steve-log", `[Steve] Run saved: ${filename}`);
+      relayLogToRenderer(`[Steve] Run saved: ${filename}`);
     } catch (err) {
-      sendToRenderer("steve-log", `[Steve] Failed to save run: ${err.message}`);
+      relayLogToRenderer(`[Steve] Failed to save run: ${err.message}`, "ERROR");
     }
 
     return runData;
@@ -128,14 +237,14 @@ ipcMain.handle("run-council", async (_event, { prompt, agents: agentHandles }) =
 });
 
 ipcMain.on("pause-council", () => {
-  console.log("[Steve] Pause signal received.");
+  writeAppLog("INFO", "[Steve] Pause signal received.");
   if (activePipeline) {
     activePipeline.requestPause();
   }
 });
 
 ipcMain.on("resume-council", () => {
-  console.log("[Steve] Resume signal received.");
+  writeAppLog("INFO", "[Steve] Resume signal received.");
   if (activePipeline) {
     activePipeline.resume();
   }

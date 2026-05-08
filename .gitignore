@@ -2,4 +2,8 @@ node_modules/
 sessions/
 runs/
 auth/
+profiles/
+local_data/
+logs/
+run-artifacts/
 diagnostics/output/

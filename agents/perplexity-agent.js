@@ -49,12 +49,107 @@ class PerplexityAgent extends BaseAgent {
     // Try submit button or Enter
     const submitBtn = await page.$('button[aria-label="Submit"]');
     if (submitBtn) {
-      await submitBtn.click();
+      let retriedAfterDismiss = false;
+
+      if (await this.dismissSignupOverlay(page)) {
+        this.onLog("[sonar] Dismissed sign-up overlay, retrying send.");
+        retriedAfterDismiss = true;
+      }
+
+      try {
+        await submitBtn.click();
+      } catch (err) {
+        if (!retriedAfterDismiss && await this.dismissSignupOverlay(page)) {
+          this.onLog("[sonar] Dismissed sign-up overlay, retrying send.");
+          await submitBtn.click();
+        } else {
+          throw err;
+        }
+      }
     } else {
       await page.keyboard.press("Enter");
     }
 
     this.log("Prompt sent via Perplexity interface.");
+  }
+
+  async dismissSignupOverlay(page) {
+    const overlay = await this.findSignupOverlay(page);
+    if (!overlay) {
+      return false;
+    }
+
+    const closeSelectors = [
+      'button[aria-label="Close"]',
+      'button[aria-label="Dismiss"]',
+      'button:has-text("Close")',
+      'button:has-text("Dismiss")',
+      'button:has-text("Not now")',
+      'button:has-text("Maybe later")',
+      'button:has-text("Skip")',
+      'button:has-text("×")',
+      'button:has-text("✕")',
+    ];
+
+    for (const selector of closeSelectors) {
+      const button = overlay.locator(selector).first();
+      if (await button.count()) {
+        const visible = await button.isVisible().catch(() => false);
+        if (visible) {
+          await button.click().catch(() => {});
+          if (await this.waitForOverlayToHide(overlay)) {
+            return true;
+          }
+        }
+      }
+    }
+
+    await page.keyboard.press("Escape").catch(() => {});
+    if (await this.waitForOverlayToHide(overlay)) {
+      return true;
+    }
+
+    await page.mouse.click(10, 10).catch(() => {});
+    return this.waitForOverlayToHide(overlay);
+  }
+
+  async findSignupOverlay(page) {
+    const overlaySelectors = [
+      '[role="dialog"]',
+      '[aria-modal="true"]',
+      '[class*="modal"]',
+      '[class*="overlay"]',
+    ];
+    const signupPattern = /sign up|sign in|log in|login|create account|continue with/i;
+
+    for (const selector of overlaySelectors) {
+      const candidates = page.locator(selector);
+      const count = Math.min(await candidates.count(), 5);
+
+      for (let i = 0; i < count; i++) {
+        const candidate = candidates.nth(i);
+        const visible = await candidate.isVisible().catch(() => false);
+        if (!visible) {
+          continue;
+        }
+
+        const text = await candidate.innerText().catch(() => "");
+        if (signupPattern.test(text)) {
+          return candidate;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  async waitForOverlayToHide(overlay) {
+    try {
+      await overlay.waitFor({ state: "hidden", timeout: 2000 });
+      return true;
+    } catch (_) {
+      return !(await overlay.isVisible().catch(() => false));
+    }
   }
 
   async extractResponse(page) {

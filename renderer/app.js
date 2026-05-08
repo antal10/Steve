@@ -52,6 +52,19 @@
     runStatus.textContent = text;
   }
 
+  function formatRunStatus(status) {
+    if (status === "completed") {
+      return "Complete";
+    }
+    if (status === "partial") {
+      return "Partial";
+    }
+    if (status === "failed") {
+      return "Failed";
+    }
+    return "Ready";
+  }
+
   function syncControls() {
     const threadAvailable = Boolean(currentPrompt || currentPosts.length || currentMinutes);
 
@@ -315,7 +328,9 @@
         setStage("idle");
         updateStatus("Ready");
       } else {
-        updateStatus("Complete");
+        const finalStatus = formatRunStatus(result && result.status);
+        updateStatus(finalStatus);
+        appendLog(`[Steve] Run finished with status: ${(result && result.status) || "completed"}.`);
       }
     } catch (err) {
       appendLog(`[Steve] Error: ${err.message}`);

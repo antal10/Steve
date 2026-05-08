@@ -1,23 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 
-const RUNS_DIR = path.resolve(__dirname, "..", "runs");
+const {
+  assertPathInsideUserDataRoot,
+  getRunArtifactsDir,
+} = require("../runtime/runtime-paths");
 
-/**
- * Ensure the runs/ directory exists.
- */
-function ensureDir() {
-  if (!fs.existsSync(RUNS_DIR)) {
-    fs.mkdirSync(RUNS_DIR, { recursive: true });
-  }
+function ensureRunArtifactsDir() {
+  return getRunArtifactsDir();
 }
 
-/**
- * Generate a run filename: YYYY-MM-DD_HHMM_runN.json
- * N increments if a file for that minute already exists.
- */
 function generateFilename() {
-  ensureDir();
+  const runsDir = ensureRunArtifactsDir();
 
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -29,48 +23,65 @@ function generateFilename() {
   const prefix = `${yyyy}-${mm}-${dd}_${hh}${mi}`;
   let n = 1;
 
-  while (fs.existsSync(path.join(RUNS_DIR, `${prefix}_run${n}.json`))) {
+  while (
+    fs.existsSync(path.join(runsDir, `${prefix}_run${n}.json`))
+    || fs.existsSync(path.join(runsDir, `${prefix}_run${n}`))
+  ) {
     n++;
   }
 
   return `${prefix}_run${n}.json`;
 }
 
-/**
- * Save a run object to disk.
- * @param {object} runData — the complete run object
- * @returns {string} — the filename written
- */
-function saveRun(runData) {
-  ensureDir();
+function saveRun(runData, options = {}) {
+  const config = {
+    write_artifacts: false,
+    ...options,
+  };
+  const runsDir = ensureRunArtifactsDir();
   const filename = generateFilename();
-  const filepath = path.join(RUNS_DIR, filename);
+  const runId = filename.replace(".json", "");
+  const filepath = assertPathInsideUserDataRoot(
+    path.join(runsDir, filename),
+    "run artifact file"
+  );
+  const mirrorDir = assertPathInsideUserDataRoot(
+    path.join(runsDir, runId),
+    "run artifact mirror directory"
+  );
 
-  // Set run_id from filename (without extension)
-  runData.run_id = filename.replace(".json", "");
+  runData.run_id = runId;
 
   fs.writeFileSync(filepath, JSON.stringify(runData, null, 2), "utf-8");
+
+  if (config.write_artifacts) {
+    const { mirrorRunArtifacts } = require("./artifact-mirror");
+    mirrorRunArtifacts(runData, {
+      runsDir,
+      runId,
+      sourceJsonFilename: filename,
+    });
+
+    if (!fs.existsSync(mirrorDir)) {
+      throw new Error(`Artifact mirror was not created for run_id "${runId}".`);
+    }
+  }
+
   return filename;
 }
 
-/**
- * Load and parse a run file.
- * @param {string} filename — the run filename (e.g. "2026-03-31_1145_run1.json")
- * @returns {object} — parsed run object
- */
 function loadRun(filename) {
-  const filepath = path.join(RUNS_DIR, filename);
+  const filepath = assertPathInsideUserDataRoot(
+    path.join(ensureRunArtifactsDir(), filename),
+    "run artifact file"
+  );
   const raw = fs.readFileSync(filepath, "utf-8");
   return JSON.parse(raw);
 }
 
-/**
- * List all run filenames sorted by date (newest first).
- * @returns {string[]} — array of filenames
- */
 function listRuns() {
-  ensureDir();
-  const files = fs.readdirSync(RUNS_DIR).filter((f) => f.endsWith(".json"));
+  const runsDir = ensureRunArtifactsDir();
+  const files = fs.readdirSync(runsDir).filter((entry) => entry.endsWith(".json"));
   files.sort().reverse();
   return files;
 }
